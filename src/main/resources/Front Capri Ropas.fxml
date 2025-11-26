@@ -22,6 +22,11 @@
 <?import javafx.scene.text.Font?>
 <?import javafx.scene.text.TextFlow?>
 
+<?import javafx.collections.FXCollections?>
+<?import java.lang.String?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.CheckBox?>
 <VBox maxHeight="-Infinity" maxWidth="-Infinity" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="org.sistema.Controlador_Pestanias">
    <children>
       <AnchorPane prefHeight="20.0">
@@ -483,6 +488,144 @@
                   </AnchorPane>
             </content>
           </Tab>
+           <Tab text="Pedidos">
+              <content>
+                 <AnchorPane>
+                    <children>
+                       <VBox AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+                          <children>
+                             <HBox>
+                                <children>
+                                   <Label text="Buscar por Artículo:" />
+                                   <TextField fx:id="fldBuscarArticuloPedido" />
+                                   <Label text="Estado:" />
+                                   <TextField fx:id="fldBuscarEstadoPedido" />
+                                   <Label text="Fecha Inicial:" />
+                                   <DatePicker fx:id="dtFechaInicialPedido" />
+                                   <Label text="Fecha Final:" />
+                                   <DatePicker fx:id="dtFechaFinalPedido" />
+                                   <Button fx:id="btnRefrescarPedidos" text="Refrescar" />
+                                </children>
+                             </HBox>
+                             <TableView fx:id="tblPedidos" VBox.vgrow="ALWAYS">
+                                <columns>
+                                   <TableColumn fx:id="colIdPedido" text="ID Pedido" />
+                                   <TableColumn fx:id="colFechaPedido" text="Fecha Pedido" />
+                                   <TableColumn fx:id="colEstadoPedido" text="Estado" />
+                                   <TableColumn fx:id="colMontoPedido" text="Monto Total" />
+                                   <TableColumn fx:id="colNombreClientePedido" text="Nombre Cliente" />
+                                   <TableColumn fx:id="colAccionesPedido" text="Acciones" />
+                                </columns>
+                             </TableView>
+                          </children>
+                       </VBox>
+                    </children>
+                 </AnchorPane>
+              </content>
+           </Tab>
+           <Tab text="Artículos Web">
+              <content>
+                 <AnchorPane>
+                    <children>
+                       <VBox spacing="20" AnchorPane.bottomAnchor="20.0" AnchorPane.leftAnchor="20.0"
+                             AnchorPane.rightAnchor="20.0" AnchorPane.topAnchor="20.0">
+
+                          <!-- Header -->
+                          <Label text="Subir Artículo a la Web Capri" styleClass="title-label">
+                             <font>
+                                <Font name="System Bold" size="18.0" />
+                             </font>
+                          </Label>
+
+                          <!-- Search and Table Section -->
+                          <VBox spacing="10">
+                             <HBox spacing="15" alignment="CENTER_LEFT">
+                                <Label text="Buscar:" />
+                                <TextField fx:id="fldBuscarArticuloWeb" promptText="Buscar por ID o nombre"
+                                           maxWidth="250" />
+                             </HBox>
+
+                             <TableView fx:id="tblProductosWeb" VBox.vgrow="ALWAYS" prefHeight="300">
+                                <columns>
+                                   <TableColumn fx:id="colIdWeb" text="ID" prefWidth="80" />
+                                   <TableColumn fx:id="colPrendaWeb" text="Prenda" prefWidth="200" />
+                                   <TableColumn fx:id="colEstadoWeb" text="Estado" prefWidth="150" />
+                                   <TableColumn fx:id="colPublicadoWeb" text="Publicado en Web" prefWidth="150" />
+                                   <TableColumn fx:id="colAccionesWeb" text="Acciones" prefWidth="150" />
+                                </columns>
+                             </TableView>
+                          </VBox>
+
+                          <!-- Form Section -->
+                          <GridPane hgap="15" vgap="10" maxWidth="500">
+                             <padding>
+                                <Insets top="10" />
+                             </padding>
+
+                             <Label text="Título artículo:" GridPane.columnIndex="0" GridPane.rowIndex="0" />
+                             <TextField fx:id="fldNombreTarjeta" maxWidth="250"
+                                        GridPane.columnIndex="1" GridPane.rowIndex="0" />
+
+                             <Label text="Texto Tarjeta:" GridPane.columnIndex="0" GridPane.rowIndex="1" />
+                             <TextField fx:id="fldTextoTarjeta" maxWidth="250"
+                                        GridPane.columnIndex="1" GridPane.rowIndex="1" />
+
+                             <Label text="Precio:" GridPane.columnIndex="0" GridPane.rowIndex="2" />
+                             <TextField fx:id="fldPrecioTarjeta" maxWidth="250"
+                                        GridPane.columnIndex="1" GridPane.rowIndex="2" />
+
+                             <Label text="Talle:" GridPane.columnIndex="0" GridPane.rowIndex="6" />
+                             <ComboBox fx:id="cmbTalleWeb" maxWidth="250" GridPane.columnIndex="1" GridPane.rowIndex="6">
+                                <items>
+                                   <FXCollections fx:factory="observableArrayList">
+                                      <String fx:value="S" />
+                                      <String fx:value="M" />
+                                      <String fx:value="L" />
+                                      <String fx:value="XL" />
+                                   </FXCollections>
+                                </items>
+                             </ComboBox>
+
+                             <Label text="Detalle:" GridPane.columnIndex="0" GridPane.rowIndex="3"
+                                    GridPane.valignment="TOP" />
+                             <TextArea fx:id="fldDetalleTarjeta" prefRowCount="4" maxWidth="250"
+                                       wrapText="true" GridPane.columnIndex="1" GridPane.rowIndex="3" />
+
+                             <Label text="Categoría:" GridPane.columnIndex="0" GridPane.rowIndex="4" />
+                             <HBox spacing="10" GridPane.columnIndex="1" GridPane.rowIndex="4">
+                                <ComboBox fx:id="cmbCategoriaWeb" maxWidth="250">
+                                   <items>
+                                      <FXCollections fx:factory="observableArrayList">
+                                         <String fx:value="Tops" />
+                                         <String fx:value="Polleras" />
+                                         <String fx:value="Pantalones" />
+                                         <String fx:value="Minis" />
+                                         <String fx:value="Vestidos" />
+                                         <String fx:value="Accesorios" />
+                                         <String fx:value="Remeras" />
+                                      </FXCollections>
+                                   </items>
+                                </ComboBox>
+                                <CheckBox fx:id="chkNovedad" text="Novedad" />
+                             </HBox>
+                             <Label text="Imagen:" GridPane.columnIndex="0" GridPane.rowIndex="5" />
+                             <VBox spacing="10" GridPane.columnIndex="1" GridPane.rowIndex="5">
+                                <HBox spacing="10">
+                                   <Button fx:id="btnSeleccionarImagen" text="Seleccionar Imagen" onAction="#seleccionarImagen" />
+                                   <Label fx:id="lblImagenSeleccionada" />
+                                </HBox>
+                             </VBox>
+                          </GridPane>
+
+                          <!-- Action Button -->
+                          <Button fx:id="btnGenerarSubirArticulo" text="Generar y Subir Artículo"
+                                  onAction="#generarYSubirArticulo" maxWidth="200"
+                                  alignment="CENTER" />
+                       </VBox>
+                    </children>
+                 </AnchorPane>
+              </content>
+           </Tab>
         </tabs>
       </TabPane>
    </children>

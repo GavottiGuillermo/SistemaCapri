@@ -1,6 +1,10 @@
 package org.sistema;
 
+import com.google.api.gax.paging.Page;
+import com.google.cloud.storage.*;
+import com.google.cloud.storage.Blob;
 import javafx.application.Platform;
+import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.collections.FXCollections;
@@ -20,12 +24,15 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.Path;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 
 import java.io.*;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.sql.*;
 import java.sql.Date;
 import java.text.Normalizer;
@@ -141,73 +148,665 @@ public class Controlador_Pestanias implements Initializable {
     @FXML Connection conexionABBDD;
 
     ////////////PESTAÑA CONSULTAR/MODIFICAR LISTAS ////////////////////////
-    @FXML
-    private ComboBox<String> cmbListas;
-    @FXML
-    private String listaActual = null;
-
+    @FXML private ComboBox<String> cmbListas;
+    @FXML private String listaActual = null;
     private Button btnRefrescarModifLista;
-
-    @FXML
-    private TableView<ObservableList<String>> tblConsulta;
-    @FXML
-    private TableColumn<ObservableList<String>, String> colGenerica; // Se crean dinámicamente
-
+    @FXML private TableView<ObservableList<String>> tblConsulta;
+    @FXML private TableColumn<ObservableList<String>, String> colGenerica; // Se crean dinámicamente
     private final String[] opcionesListas = {"productos", "lotes", "pagos", "gastos_extra", "clientes"};
 
+    ////////////PESTAÑA PEDIDOS ////////////////////////
+    @FXML private TableView<ObservableList<String>> tblPedidos;
+    @FXML private TableColumn<ObservableList<String>, String> colIdPedido;
+    @FXML private TableColumn<ObservableList<String>, String> colFechaPedido;
+    @FXML private TableColumn<ObservableList<String>, String> colEstadoPedido;
+    @FXML private TableColumn<ObservableList<String>, String> colMontoPedido;
+    @FXML private TableColumn<ObservableList<String>, String> colNombreClientePedido;
+    @FXML private TableColumn<ObservableList<String>, Void> colAccionesPedido;
+    @FXML private TextField fldBuscarArticuloPedido, fldBuscarEstadoPedido;
+    @FXML private DatePicker dtFechaInicialPedido, dtFechaFinalPedido;
+    @FXML private Button btnRefrescarPedidos;
+    private final ObservableList<ObservableList<String>> listaPedidos = FXCollections.observableArrayList();
+    ////////////PESTAÑA ARTICULOS WEB ////////////////////////
+    @FXML private TextField fldIdArticuloWeb, fldPrendaWeb;
+    @FXML private ComboBox<String> cmbCategoriaWeb;
+    @FXML private Button btnSeleccionarTxtWeb, btnSeleccionarImagenWeb, btnSubirArticuloWeb;
+    @FXML private Label lblRutaTxtWeb, lblRutaImagenWeb;
+    private File archivoTxtSeleccionado, archivoImagenSeleccionada;
+    @FXML
+    private TableView<RegistroArticuloVentas> tblProductosWeb;
+    @FXML
+    private TextField fldNombreTarjeta, fldTextoTarjeta, fldPrecioTarjeta;
+    @FXML
+    private TextArea fldDetalleTarjeta;
+    @FXML private TableColumn<RegistroArticuloVentas, Integer> colIdWeb;
+    @FXML private TableColumn<RegistroArticuloVentas, String> colPrendaWeb;
+    @FXML private TableColumn<RegistroArticuloVentas, String> colEstadoWeb;
+    @FXML private TableColumn<RegistroArticuloVentas, String> colPublicadoWeb;
+    @FXML private TableColumn<RegistroArticuloVentas, Void> colAccionesWeb;
+    @FXML private TextField fldBuscarArticuloWeb;
+    @FXML private Button btnGenerarSubirArticulo;
+    @FXML private Button btnSeleccionarImagen;
+    @FXML private Label lblImagenSeleccionada;
+    @FXML private ComboBox cmbTalleWeb;
+    @FXML private CheckBox chkNovedad;
+    private File imagenSeleccionada;
+
+    private FilteredList<RegistroArticuloVentas> productosFiltrados;
     @Override public void initialize(URL location, ResourceBundle resources) {
-        ////////////PESTAÑA VENTAS ////////////////////////
-        btnFinalizarCompra.setDisable(true);
-        btnCancelarCompra.setDisable(true);
-        cargarDatosDesdeBBDD();
-        configurarTablaStock();
-        configurarTablaCompra();
-        actualizarResumen();
-        inicializarFiltrado();
-        btnCancelarCompra.setOnAction(event -> {
-            cancelarCompra();
-        });
-        btnFinalizarCompra.setOnAction(event -> {
-            finalizarCompra();
-        });
 
-        ////////////PESTAÑA CASHFLOW ////////////////////////
-        configurarTablaCashFlow();
-
-        ////////////PESTAÑA CARGA ////////////////////////
-        btnCargarArchivo.setDisable(true);
-        rutaArchivoCargado.setText("");
-        btnBuscarArchivo.setOnAction(event -> buscarArchivo());
-        btnCargarArchivo.setOnAction(event -> {
+        try{
+            ////////////PESTAÑA ARTICULOS WEB ////////////////////////
+            configurarTablaWeb();
+            configurarSeleccionTablaWeb();
+            configurarFiltroTablaWeb();
+            obtenerProductosDesdeBD();
+            GoogleCloudConfig.configureGoogleCredentials();
+            ////////////PESTAÑA VENTAS ////////////////////////
+            btnRefrescarStock.setOnAction(event -> obtenerProductosDesdeBD());
+            btnFinalizarCompra.setDisable(true);
+            btnCancelarCompra.setDisable(true);
+            cargarDatosDesdeBBDD();
+            configurarTablaStock();
+            configurarTablaCompra();
+            actualizarResumen();
+            inicializarFiltrado();
+            btnCancelarCompra.setOnAction(event -> {
+                cancelarCompra();
+            });
+            btnFinalizarCompra.setOnAction(event -> {
+                finalizarCompra();
+            });
+            ////////////PESTAÑA CASHFLOW ////////////////////////
+            configurarTablaCashFlow();
+            ////////////PESTAÑA CARGA ////////////////////////
+            btnCargarArchivo.setDisable(true);
+            rutaArchivoCargado.setText("");
+            btnBuscarArchivo.setOnAction(event -> buscarArchivo());
+            btnCargarArchivo.setOnAction(event -> {
+                try {
+                    cargarArchivo();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            configurarCargaLotes();
+            ////////////PESTAÑA CONSULTAR/MODIFICAR LISTAS ////////////////////////
+            cmbListas.getItems().addAll(opcionesListas);
+            cmbListas.setValue("productos"); // Predeterminado
+            cmbListas.setOnAction(event -> {
+                try {
+                    cargarLista(cmbListas.getValue());
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            });
             try {
-                cargarArchivo();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        });
-        configurarCargaLotes();
-
-        ////////////PESTAÑA CONSULTAR/MODIFICAR LISTAS ////////////////////////
-        cmbListas.getItems().addAll(opcionesListas);
-        cmbListas.setValue("productos"); // Predeterminado
-        cmbListas.setOnAction(event -> {
-            try {
-                cargarLista(cmbListas.getValue());
+                cargarLista("productos"); // Carga inicial
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
-        });
-        try {
-            cargarLista("productos"); // Carga inicial
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+            ////////////PESTAÑA PEDIDOS ////////////////////////
+            configurarTablaPedidos();
+            btnRefrescarPedidos.setOnAction(event -> refrescarTablaPedidos());
+            refrescarTablaPedidos();
+        }catch (Exception e) {
+            System.err.println("❌ Error al inicializar el controlador.");
+            e.printStackTrace();
+            mostrarAlerta("Error de Inicialización", "Ocurrió un problema al cargar los datos iniciales.", Alert.AlertType.ERROR);
+        }
+
+    }
+
+    ////////////PESTAÑA ARTICULOS WEB ////////////////////////
+    @FXML
+    private void seleccionarImagen() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Seleccionar Imagen");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Imágenes", "*.jpg", "*.png")
+        );
+
+        File file = fileChooser.showOpenDialog(btnSeleccionarImagen.getScene().getWindow());
+        if (file != null) {
+            imagenSeleccionada = file;
+            lblImagenSeleccionada.setText(file.getName());
         }
     }
+
+    private void obtenerProductosDesdeBD() {
+        ObservableList<RegistroArticuloVentas> productosWeb = FXCollections.observableArrayList();
+
+        try {
+            conectarABBDDConReintentos();
+            String query = "SELECT id_articulo, prenda, estado, categoria, color, talle, " +
+                    "precio_venta_efectivo, precio_venta_transferencia, publicado_en_web " +
+                    "FROM productos WHERE estado = 'Disponible' ORDER BY id_articulo ASC";
+
+            Statement stmt = conexionABBDD.createStatement();
+            ResultSet rs = stmt.executeQuery(query);
+
+            while (rs.next()) {
+                RegistroArticuloVentas producto = new RegistroArticuloVentas(
+                        rs.getInt("id_articulo"),
+                        rs.getString("prenda"),
+                        rs.getString("estado"),
+                        rs.getString("categoria"),
+                        rs.getString("estado"),
+                        rs.getString("talle"),
+                        rs.getDouble("precio_venta_efectivo"),
+                        rs.getDouble("precio_venta_transferencia"),
+                        rs.getString("publicado_en_web") // Add this field
+                );
+                productosWeb.add(producto);
+            }
+
+            tblProductosWeb.setItems(productosWeb);
+            productosFiltrados = new FilteredList<>(productosWeb, p -> true);
+            tblProductosWeb.setItems(productosFiltrados);
+            tblArticulosStock.setItems(listaFiltrada);
+            btnRefrescarStock.setOnAction(event -> refrescarTablaStock());
+
+
+        } catch (SQLException e) {
+            mostrarAlerta("Error", "Error al cargar productos desde la base de datos", Alert.AlertType.ERROR);
+            e.printStackTrace();
+        } finally {
+            desconexionABBDD();
+        }
+    }
+    private void configurarTablaWeb() {
+        colIdWeb.setCellValueFactory(new PropertyValueFactory<>("idArticulo"));
+        colPrendaWeb.setCellValueFactory(new PropertyValueFactory<>("nombreArticulo"));
+        colEstadoWeb.setCellValueFactory(new PropertyValueFactory<>("estado"));
+        colPublicadoWeb.setCellValueFactory(new PropertyValueFactory<>("publicadoEnWeb"));
+
+        // Configurar columna de acciones
+        colAccionesWeb.setCellFactory(column -> new TableCell<RegistroArticuloVentas, Void>() {
+            private final Button btnQuitar = new Button("Quitar de la Web");
+
+            {
+                btnQuitar.setOnAction(event -> {
+                    RegistroArticuloVentas producto = getTableView().getItems().get(getIndex());
+                    if (producto != null) {
+                        quitarDeLaWeb(producto); // Call the method
+                    }
+                });
+            }
+
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    RegistroArticuloVentas producto = getTableView().getItems().get(getIndex());
+                    if (producto != null && "true".equalsIgnoreCase(producto.getPublicadoEnWeb())) {
+                        setGraphic(btnQuitar); // Show the button if the product is published
+                    } else {
+                        setGraphic(null); // Hide the button otherwise
+                    }
+                }
+            }
+        });
+        colPublicadoWeb.setCellFactory(column -> new TableCell<RegistroArticuloVentas, String>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setStyle("");
+                } else {
+                    setText(item);
+                    if (item.equalsIgnoreCase("true")) {
+                        setStyle("-fx-background-color: lightgreen; -fx-text-fill: black;");
+                    } else if (item.equalsIgnoreCase("false")) {
+                        setStyle("-fx-background-color: lightcoral; -fx-text-fill: black;");
+                    } else {
+                        setStyle(""); // Default style
+                    }
+                }
+            }
+        });
+
+        if (!tblProductosWeb.getColumns().contains(colAccionesWeb)) {
+            tblProductosWeb.getColumns().add(colAccionesWeb);
+        }
+    }
+    private void configurarFiltroTablaWeb() {
+        // Inicializar la lista filtrada basada en la lista original
+        productosFiltrados = new FilteredList<>(tblProductosWeb.getItems(), p -> true);
+
+        // Vincular la lista filtrada a la tabla
+        tblProductosWeb.setItems(productosFiltrados);
+
+        // Agregar un listener al campo de texto para aplicar el filtro
+        fldBuscarArticuloWeb.textProperty().addListener((observable, oldValue, newValue) -> {
+            filtrarProductosWeb(newValue);
+        });
+    }
+
+    private void filtrarProductosWeb(String filtro) {
+        if (filtro == null || filtro.isEmpty()) {
+            productosFiltrados.setPredicate(p -> true); // Mostrar todos los elementos
+        } else {
+            productosFiltrados.setPredicate(producto -> {
+                // Filtrar por nombre o ID del artículo
+                return producto.getNombreArticulo().toLowerCase().contains(filtro.toLowerCase()) ||
+                        String.valueOf(producto.getIdArticulo()).contains(filtro);
+            });
+        }
+    }
+    @FXML
+    private void configurarSeleccionTablaWeb() {
+        tblProductosWeb.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
+            if (newSelection != null) {
+                fldNombreTarjeta.setText(newSelection.getNombreArticulo());
+                // Convertir el precio a entero directamente
+                int precioEntero = (int) newSelection.getPrecioTransferencia();
+                fldPrecioTarjeta.setText(String.valueOf(precioEntero));
+            }
+        });
+    }
+
+    @FXML
+    private void generarYSubirArticulo() {
+        if (tblProductosWeb.getSelectionModel().getSelectedItem() == null) {
+            mostrarAlerta("Error", "Debe seleccionar un artículo de la tabla", Alert.AlertType.ERROR);
+            return;
+        }
+
+        if (imagenSeleccionada == null) {
+            mostrarAlerta("Error", "Debe seleccionar una imagen", Alert.AlertType.ERROR);
+            return;
+        }
+
+        String carpeta = null;
+        try {
+            String titulo = fldNombreTarjeta.getText();
+            String texto = fldTextoTarjeta.getText();
+            int precio = Integer.parseInt(fldPrecioTarjeta.getText());
+            String detalle = fldDetalleTarjeta.getText();
+            String categoria = cmbCategoriaWeb.getValue();
+            String talle = (String) cmbTalleWeb.getValue(); // Get the selected size
+            int idArticulo = tblProductosWeb.getSelectionModel().getSelectedItem().getIdArticulo();
+
+            if (titulo.isEmpty() || texto.isEmpty() || fldPrecioTarjeta.getText().isEmpty() ||
+                    detalle.isEmpty() || categoria == null || talle == null) {
+                mostrarAlerta("Error", "Todos los campos son obligatorios", Alert.AlertType.ERROR);
+                return;
+            }
+
+            // Update the price in the database
+            actualizarPrecioVentaTransferencia(idArticulo, precio);
+
+            // Generate the base name for the files
+            String nombreBase = idArticulo + "-" + tblProductosWeb.getSelectionModel().getSelectedItem().getNombreArticulo();
+            carpeta = "Novedades/" + nombreBase + "/";
+
+            // Create and write the content to the .txt file
+            String contenido = String.format("{%s}\n{%s}\n{%d}\n{%s}\n{%s}",
+                    titulo, texto, precio, talle, detalle);
+            File archivoTxt = File.createTempFile("temp_", ".txt");
+            Files.write(archivoTxt.toPath(), contenido.getBytes());
+
+            // Upload the .txt file and get its URL
+            String rutaTxt = carpeta + nombreBase + ".txt";
+            String urlTxt = subirArchivoAGoogleCloudStorage(rutaTxt, archivoTxt);
+
+            // Upload the image and get its URL
+            String extension = imagenSeleccionada.getName().substring(imagenSeleccionada.getName().lastIndexOf("."));
+            String rutaImagen = carpeta + nombreBase + extension;
+            String urlImagen = subirArchivoAGoogleCloudStorage(rutaImagen, imagenSeleccionada);
+
+            // Update the products.json
+            actualizarProductosJson(categoria, nombreBase, urlTxt, urlImagen);
+
+            // Update the database to set Publicado_En_Web to "True"
+            marcarProductoComoPublicado(idArticulo);
+
+            // Clear fields and show success message
+            limpiarCampos();
+            imagenSeleccionada = null;
+            lblImagenSeleccionada.setText("");
+            mostrarAlerta("Éxito", "Artículo subido correctamente", Alert.AlertType.INFORMATION);
+
+            obtenerProductosDesdeBD();
+            tblProductosWeb.refresh();
+
+        } catch (Exception e) {
+            // Rollback: Delete the directory if an error occurs
+            if (carpeta != null) {
+                eliminarDirectorioEnGoogleCloud(carpeta);
+            }
+            mostrarAlerta("Error", "Error al generar y subir el artículo: " + e.getMessage(), Alert.AlertType.ERROR);
+            e.printStackTrace();
+        }
+    }
+
+    private void actualizarPrecioVentaTransferencia(int idArticulo, int precio) {
+        conectarABBDDConReintentos();
+
+        if (conexionABBDD != null) {
+            String sql = "UPDATE productos SET precio_venta_transferencia = ? WHERE id_articulo = ?";
+            try (PreparedStatement stmt = conexionABBDD.prepareStatement(sql)) {
+                stmt.setInt(1, precio);
+                stmt.setInt(2, idArticulo);
+                stmt.executeUpdate();
+            } catch (SQLException e) {
+                mostrarAlerta("Error", "Error al actualizar el precio en la base de datos: " + e.getMessage(), Alert.AlertType.ERROR);
+                e.printStackTrace();
+            } finally {
+                desconexionABBDD();
+            }
+        }
+    }
+
+    private void quitarDeLaWeb(RegistroArticuloVentas producto) {
+        try {
+            // Connect to Google Cloud Storage
+            Storage storage = StorageOptions.getDefaultInstance().getService();
+
+            // Define paths
+            String folderName = producto.getIdArticulo() + "-" + producto.getNombreArticulo();
+            String folderPath = "Novedades/" + folderName;
+            String jsonFilePath = "productos.json";
+
+            // Download productos.json
+            Blob jsonBlob = storage.get("imagenes-web-capri", jsonFilePath);
+            if (jsonBlob == null) {
+                mostrarAlerta("Error", "El archivo productos.json no existe en el bucket.", Alert.AlertType.ERROR);
+                return;
+            }
+
+            String jsonContent = new String(jsonBlob.getContent());
+            JSONArray jsonArray = new JSONArray(jsonContent);
+
+            // Remove the node matching the folder name
+            boolean nodeRemoved = false;
+            for (int i = 0; i < jsonArray.length(); i++) {
+                JSONObject productNode = jsonArray.getJSONObject(i);
+                if (productNode.optString("carpeta").equals(folderName)) {
+                    jsonArray.remove(i);
+                    nodeRemoved = true;
+                    break;
+                }
+            }
+
+            if (!nodeRemoved) {
+                mostrarAlerta("Error", "No se encontró el nodo correspondiente en productos.json.", Alert.AlertType.ERROR);
+                return;
+            }
+
+            // Upload the updated productos.json
+            storage.create(BlobInfo.newBuilder("imagenes-web-capri", jsonFilePath).build(),
+                    jsonArray.toString().getBytes());
+
+            // Delete the folder and its contents
+            Page<Blob> blobs = storage.list("imagenes-web-capri", Storage.BlobListOption.prefix(folderPath));
+            for (Blob blob : blobs.iterateAll()) {
+                storage.delete(blob.getBlobId());
+            }
+
+            // Update the UI and database
+            producto.setPublicadoEnWeb("false"); // Update the property in the UI
+            marcarProductoComoNoPublicado(producto.getIdArticulo());
+            // Refrescar la tabla
+            obtenerProductosDesdeBD();
+            tblProductosWeb.refresh();
+
+            mostrarAlerta("Éxito", "El producto fue eliminado de la web correctamente.", Alert.AlertType.INFORMATION);
+        } catch (Exception e) {
+            mostrarAlerta("Error", "No se pudo eliminar el producto de la web: " + e.getMessage(), Alert.AlertType.ERROR);
+            e.printStackTrace();
+        }
+    }
+
+    private void marcarProductoComoNoPublicado(int idArticulo) {
+        try {
+            conectarABBDDConReintentos();
+            String query = "UPDATE productos SET Publicado_En_Web = 'False' WHERE id_articulo = ?";
+            PreparedStatement stmt = conexionABBDD.prepareStatement(query);
+            stmt.setInt(1, idArticulo);
+            stmt.executeUpdate();
+            System.out.println("Producto marcado como no publicado en la web.");
+        } catch (SQLException e) {
+            System.err.println("Error al marcar el producto como no publicado: " + e.getMessage());
+        } finally {
+            desconexionABBDD();
+        }
+    }
+
+    private void marcarProductoComoPublicado(int idArticulo) {
+        try {
+            conectarABBDDConReintentos();
+            String query = "UPDATE productos SET Publicado_En_Web = 'True' WHERE id_articulo = ?";
+            PreparedStatement stmt = conexionABBDD.prepareStatement(query);
+            stmt.setInt(1, idArticulo);
+            stmt.executeUpdate();
+            System.out.println("Producto marcado como publicado en la web.");
+        } catch (SQLException e) {
+            System.err.println("Error al marcar el producto como publicado: " + e.getMessage());
+        } finally {
+            desconexionABBDD();
+        }
+    }
+
+    private void eliminarDirectorioEnGoogleCloud(String carpeta) {
+        try {
+            Storage storage = StorageOptions.getDefaultInstance().getService();
+            Page<Blob> blobs = storage.list("imagenes-web-capri", Storage.BlobListOption.prefix(carpeta));
+            for (Blob blob : blobs.iterateAll()) {
+                storage.delete(blob.getBlobId());
+            }
+            System.out.println("Directorio eliminado: " + carpeta);
+        } catch (StorageException e) {
+            System.err.println("Error al eliminar el directorio en Google Cloud Storage: " + e.getMessage());
+        }
+    }
+
+    private void limpiarCampos() {
+        fldNombreTarjeta.clear();
+        fldTextoTarjeta.clear();
+        fldPrecioTarjeta.clear();
+        fldDetalleTarjeta.clear();
+        cmbCategoriaWeb.setValue(null);
+        chkNovedad.setSelected(false);
+        tblProductosWeb.getSelectionModel().clearSelection();
+    }
+
+    private String subirArchivoAGoogleCloudStorage(String rutaDestino, File archivo) throws IOException {
+        try {
+            // Configuración de Google Cloud Storage
+            Storage storage = StorageOptions.getDefaultInstance().getService();
+            BlobId blobId = BlobId.of("imagenes-web-capri", rutaDestino);
+            BlobInfo blobInfo = BlobInfo.newBuilder(blobId).setContentType(Files.probeContentType(archivo.toPath())).build();
+            storage.create(blobInfo, Files.readAllBytes(archivo.toPath()));
+
+            // Retornar la URL pública del archivo
+            return "https://storage.googleapis.com/imagenes-web-capri/" + rutaDestino;
+        } catch (StorageException e) {
+            System.err.println("Error uploading file to Google Cloud Storage: " + e.getMessage());
+            System.err.println("Code: " + e.getCode());
+            System.err.println("Reason: " + e.getReason());
+            throw new IOException("Error uploading file to Google Cloud Storage: " + e.getMessage(), e);
+        }
+    }
+
+    private void actualizarProductosJson(String categoria, String carpeta, String urlTxt, String urlImagen) throws IOException {
+        Storage storage = StorageOptions.getDefaultInstance().getService();
+        Blob blob = storage.get("imagenes-web-capri", "productos.json");
+
+        JSONArray productos;
+
+        try {
+            // Check if the file exists
+            if (blob == null || !blob.exists()) {
+                System.out.println("El archivo productos.json no existe. Se creará uno nuevo.");
+                productos = new JSONArray(); // Create a new JSON array
+            } else {
+                // Read the existing content
+                String contenidoJson = new String(blob.getContent());
+                productos = contenidoJson.isEmpty() ? new JSONArray() : new JSONArray(contenidoJson);
+            }
+
+            // Modify category if novedad is selected
+            if (chkNovedad.isSelected()) {
+                categoria += "-Novedad";
+            }
+
+            // Add the new product
+            JSONObject nuevoProducto = new JSONObject();
+            nuevoProducto.put("categoria", categoria);
+            nuevoProducto.put("carpeta", carpeta);
+            nuevoProducto.put("imagen", urlImagen);
+            nuevoProducto.put("txt", urlTxt);
+
+            productos.put(nuevoProducto);
+
+            // Write the updated JSON back to the bucket
+            BlobId blobId = BlobId.of("imagenes-web-capri", "productos.json");
+            BlobInfo blobInfo = BlobInfo.newBuilder(blobId).setContentType("application/json").build();
+            storage.create(blobInfo, productos.toString().getBytes());
+
+            System.out.println("productos.json actualizado correctamente.");
+        } catch (Exception e) {
+            System.err.println("Error al actualizar productos.json: " + e.getMessage());
+            throw new IOException("Error al actualizar productos.json", e);
+        }
+    }
+    ////////////PESTAÑA PEDIDOS ////////////////////////
+    private void configurarTablaPedidos() {
+        colIdPedido.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().get(0)));
+        colFechaPedido.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().get(1)));
+        colEstadoPedido.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().get(2)));
+        colMontoPedido.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().get(3)));
+        colNombreClientePedido.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().get(4)));
+
+        colAccionesPedido.setCellFactory(param -> new TableCell<>() {
+            private final Button btnVer = new Button("Ver");
+            {
+                btnVer.setOnAction(event -> {
+                    ObservableList<String> pedido = getTableRow().getItem();
+                    mostrarVentanaDetallePedido(pedido);
+                });
+            }
+
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    setGraphic(btnVer);
+                }
+            }
+        });
+
+        tblPedidos.setItems(listaPedidos);
+    }
+
+    private void refrescarTablaPedidos() {
+        listaPedidos.clear();
+        conectarABBDDConReintentos();
+
+        if (conexionABBDD != null) {
+            try {
+                String sql = "SELECT * FROM sp_consultar_pedidos(?, ?, ?, ?)";
+                PreparedStatement stmt = conexionABBDD.prepareStatement(sql);
+
+                // Set parameters
+                stmt.setString(1, fldBuscarArticuloPedido.getText());
+                stmt.setString(2, fldBuscarEstadoPedido.getText());
+                stmt.setDate(3, dtFechaInicialPedido.getValue() != null ?
+                        Date.valueOf(dtFechaInicialPedido.getValue()) : null);
+                stmt.setDate(4, dtFechaFinalPedido.getValue() != null ?
+                        Date.valueOf(dtFechaFinalPedido.getValue()) : null);
+
+                ResultSet rs = stmt.executeQuery();
+
+                // Map pedidos by id_pedido to group items
+                Map<String, ObservableList<String>> pedidosMap = new HashMap<>();
+
+                SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm");
+
+                while (rs.next()) {
+                    String idPedido = rs.getString("id_pedido");
+
+                    if (!pedidosMap.containsKey(idPedido)) {
+                        ObservableList<String> fila = FXCollections.observableArrayList();
+                        fila.add(idPedido); // ID Pedido
+
+                        // Format the timestamp
+                        Timestamp pedidoFecha = rs.getTimestamp("pedido_fecha");
+                        String fechaFormateada = pedidoFecha != null ?
+                                dateFormat.format(pedidoFecha) : "";
+                        fila.add(fechaFormateada); // Fecha formateada
+
+                        fila.add(rs.getString("estado")); // Estado
+                        fila.add(rs.getString("pedido_monto_total")); // Monto Total
+                        fila.add(rs.getString("pedido_nombre_cliente")); // Nombre Cliente
+
+                        pedidosMap.put(idPedido, fila);
+                    }
+                }
+
+                listaPedidos.addAll(pedidosMap.values());
+                tblPedidos.refresh();
+
+            } catch (SQLException e) {
+                mostrarAlerta("Error", "Error al cargar los pedidos: " + e.getMessage(), Alert.AlertType.ERROR);
+                e.printStackTrace();
+            } finally {
+                desconexionABBDD();
+            }
+        }
+    }
+    private void mostrarVentanaDetallePedido(ObservableList<String> pedido) {
+        Stage ventana = new Stage();
+        ventana.setTitle("Detalle del Pedido");
+
+        VBox layout = new VBox(10);
+        layout.setPadding(new Insets(15));
+
+        Label lblDetalle = new Label("Detalle del Pedido:");
+        layout.getChildren().add(lblDetalle);
+
+        for (String detalle : pedido) {
+            layout.getChildren().add(new Label(detalle));
+        }
+
+        Button btnMarcarEntregado = new Button("Marcar como Entregado");
+        btnMarcarEntregado.setOnAction(event -> {
+            try {
+                conectarABBDDConReintentos();
+                if (conexionABBDD != null) {
+                    String sql = "CALL sp_actualizar_pedido_entregado(?)";
+                    PreparedStatement stmt = conexionABBDD.prepareStatement(sql);
+                    stmt.setString(1, pedido.get(0)); // Pass the ID of the pedido
+                    stmt.execute();
+                    desconexionABBDD();
+                    refrescarTablaPedidos();
+                    ventana.close();
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        });
+
+        layout.getChildren().add(btnMarcarEntregado);
+
+        Scene escena = new Scene(layout);
+        ventana.setScene(escena);
+        ventana.initModality(Modality.APPLICATION_MODAL);
+        ventana.showAndWait();
+    }
+
 
     ////////////PESTAÑA CONSULTAR/MODIFICAR LISTAS ////////////////////////
     private void cargarLista(String nombreLista) throws SQLException {
         listaActual = nombreLista; // Guardamos la lista actual
-        conectarABBDD();
+        conectarABBDDConReintentos();
         if (conexionABBDD != null) {
             String sql = "SELECT * FROM sp_consultar_lista(?)";
             PreparedStatement stmt = conexionABBDD.prepareStatement(sql);
@@ -432,7 +1031,7 @@ public class Controlador_Pestanias implements Initializable {
     }
 
     private void ejecutarModificacionEnBBDD(Map<String, String> datos) throws SQLException {
-        conectarABBDD();
+        conectarABBDDConReintentos();
         if (conexionABBDD != null) {
             String nombreTabla = cmbListas.getValue().toLowerCase();
 
@@ -463,7 +1062,7 @@ public class Controlador_Pestanias implements Initializable {
     }
 
     private void ejecutarEliminacionEnBBDD(Map<String, String> datos) throws SQLException {
-        conectarABBDD();
+        conectarABBDDConReintentos();
         if (conexionABBDD != null) {
             String nombreTabla = cmbListas.getValue();
 
@@ -557,35 +1156,35 @@ public class Controlador_Pestanias implements Initializable {
             System.out.println("Estoy procesando >>Lotes<<");
             Sheet hojaLotes = workbook.getSheet("Lotes");
             cargarListaLotes(hojaLotes);
-            conectarABBDD();
+            conectarABBDDConReintentos();
             cargarListaLotesABBDD(lstLotes);
             desconexionABBDD();
             //-----------------------
             System.out.println("Estoy procesando >>Productos<<");
             Sheet hojaProductos = workbook.getSheet("Productos");
             cargarListaProductos(hojaProductos);
-            conectarABBDD();
+            conectarABBDDConReintentos();
             cargarListaProductosABBDD(lstProductos);
             desconexionABBDD();
             //-----------------------
             System.out.println("Estoy procesando >>Pagos<<");
             Sheet hojaPagos = workbook.getSheet("Pagos");
             cargarListaPagos(hojaPagos);
-            conectarABBDD();
+            conectarABBDDConReintentos();
             cargarListaPagosABBDD(lstPagos);
             desconexionABBDD();
             //-----------------------
             System.out.println("Estoy procesando >>Gastos Extra<<");
             Sheet hojaGastosExtra = workbook.getSheet("Gastos Extra");
             cargarListaGastosExtra(hojaGastosExtra);
-            conectarABBDD();
+            conectarABBDDConReintentos();
             cargarListaGastosExtraABBDD(lstGastosExtra);
             desconexionABBDD();
             //-----------------------
             System.out.println("Estoy procesando >>Clientes<<");
             Sheet hojaClientes = workbook.getSheet("Clientes");
             cargarListaClientes(hojaClientes);
-            conectarABBDD();
+            conectarABBDDConReintentos();
             cargarListaClientesABBDD(lstClientes);
             desconexionABBDD();
             mostrarAlerta("Carga Masiva", "Archivo cargado correctamente a Base de Datos", Alert.AlertType.INFORMATION);
@@ -1030,7 +1629,7 @@ public class Controlador_Pestanias implements Initializable {
         // Convertir el JSONArray a String
         String productosJsonString = productosJson.toString();
 
-        conectarABBDD();
+        conectarABBDDConReintentos();
         PreparedStatement stmt = null;
 
         try {
@@ -1110,6 +1709,7 @@ public class Controlador_Pestanias implements Initializable {
     }
 
     //////////// FUNCIONES PESTAÑA VENTAS ////////////////////////
+    @FXML
     private void configurarTablaStock() {
         colIdArticuloVentas.setCellValueFactory(new PropertyValueFactory<>("idArticulo"));
         colEstadoVentas.setCellValueFactory(new PropertyValueFactory<>("estado"));
@@ -1130,9 +1730,11 @@ public class Controlador_Pestanias implements Initializable {
                     } else if (item.equals("Sin stock") || item.equals("Sin Stock")) {
                         setTextFill(javafx.scene.paint.Color.RED);
                         setStyle("-fx-text-fill: black; -fx-background-color: lightcoral;");
+                    } else if (item.toLowerCase().contains("pendiente")) {
+                        setStyle("-fx-background-color: yellow;");
                     } else {
                         setTextFill(javafx.scene.paint.Color.BLACK);
-                        setStyle(""); // Restablecer estilo para otros casos
+                        setStyle(""); // Reset style for other cases
                     }
                 }
             }
@@ -1148,13 +1750,11 @@ public class Controlador_Pestanias implements Initializable {
             private final Button btnDevolver = new Button("Devolución");
 
             {
-                // Acción del botón Agregar al carrito
                 btnAgregar.setOnAction(event -> {
                     RegistroArticuloVentas articulo = getTableView().getItems().get(getIndex());
                     agregarAlCarrito(articulo);
                 });
 
-                // Acción del botón Devolución
                 btnDevolver.setOnAction(event -> {
                     RegistroArticuloVentas articulo = getTableView().getItems().get(getIndex());
 
@@ -1272,20 +1872,21 @@ public class Controlador_Pestanias implements Initializable {
     private void cargarDatosDesdeBBDD() {
         listaStock.clear();
         String query = "{CALL sp_consultar_listado_ventas()}";
-        conectarABBDD();
+        conectarABBDDConReintentos();
         try (CallableStatement callableStatement = conexionABBDD.prepareCall(query)) {
 
             ResultSet resultSet = callableStatement.executeQuery();
             while (resultSet.next()) {
                 RegistroArticuloVentas articuloVentas = new RegistroArticuloVentas(
                         resultSet.getInt("out_id_articulo"),
-                        resultSet.getString("out_estado"),
                         resultSet.getString("out_nombre_articulo"),
+                        resultSet.getString("out_estado"),
                         resultSet.getString("out_categoria"),
                         resultSet.getString("out_color"),
                         resultSet.getString("out_talle"),
                         resultSet.getDouble("out_precio_venta_efectivo"),
-                        resultSet.getDouble("out_precio_venta_transferencia")
+                        resultSet.getDouble("out_precio_venta_transferencia"),
+                        resultSet.getString("out_publicado_en_web")
                 );
                 listaStock.add(articuloVentas);
             }
@@ -1333,15 +1934,19 @@ public class Controlador_Pestanias implements Initializable {
 
     @FXML
     private void refrescarTablaStock() {
-        // Limpiar los campos de búsqueda
         fldBuscarNumArticulo.clear();
         fldBuscarNomPrenda.clear();
         fldBuscarEstado.clear();
         fldBuscarCategoria.clear();
 
-        // Recargar los datos y reconfigurar la tabla
-        cargarDatosDesdeBBDD();
+        // Create a new modifiable list and set it to the table
+        ObservableList<RegistroArticuloVentas> nuevaLista = FXCollections.observableArrayList();
+        tblArticulosStock.setItems(nuevaLista);
+
+        // Fetch updated data and populate the table
+        obtenerProductosDesdeBD();
         configurarTablaStock();
+        tblArticulosStock.refresh();
     }
     @FXML
     private void cancelarCompra() {
@@ -1417,7 +2022,7 @@ public class Controlador_Pestanias implements Initializable {
     @FXML
     private void devolverArticulo(RegistroArticuloVentas articulo) {
         try {
-            conectarABBDD(); // Asegurate de tener esta función
+            conectarABBDDConReintentos(); // Asegurate de tener esta función
             CallableStatement stmt = conexionABBDD.prepareCall("CALL sp_devolver_articulo(?)");
             stmt.setInt(1, articulo.getIdArticulo());
             stmt.execute();
@@ -1504,7 +2109,7 @@ public class Controlador_Pestanias implements Initializable {
     }
 
     private void confirmarCompra(String metodoPago, double totalCompra, ObservableList<RegistroArticuloVentas> listaCompra) {
-        conectarABBDD();
+        conectarABBDDConReintentos();
 
         if (conexionABBDD != null) {
             try {
@@ -1599,7 +2204,7 @@ public class Controlador_Pestanias implements Initializable {
 
         String sql = "SELECT * FROM sp_analizar_cashflow(?, ?, ?)";
 
-        conectarABBDD();
+        conectarABBDDConReintentos();
 
         try (PreparedStatement pstmt = conexionABBDD.prepareStatement(sql)) {
             pstmt.setDate(1, Date.valueOf(fechaInicio));
@@ -1682,21 +2287,49 @@ public class Controlador_Pestanias implements Initializable {
         btnConsultarCF.setDisable(true);
     }
 
-    public void conectarABBDD() {
-        String url = "jdbc:postgresql://autorack.proxy.rlwy.net:17870/railway";
-        String user = "postgres"; // O el usuario que aparece en Railway
-        String password = "CYAFNVxEfUHpElpvEDPdVkMVecpWTNKq"; // Copia la contraseña de Railway
+    public void conectarABBDDConReintentos() {
+        /*String url = "jdbc:postgresql://dpg-d1r8g98dl3ps73f6mu7g-a.oregon-postgres.render.com:5432/capristore";
+        String user = "capristore_user";
+        String password = "8nJfvy63HeV0hhUB1DtEJ44ANgBf8SEy";*/
+
+        String url = "jdbc:postgresql://ep-long-moon-adlto9zd-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channelBinding=require";
+        String user = "neondb_owner";
+        String password = "npg_xMv5KQs3lVNo";
+
+        final int MAX_RETRIES = 3;
+        final int RETRY_DELAY_MS = 2000;
 
         conexionABBDD = null;
-        try {
-            conexionABBDD = DriverManager.getConnection(url, user, password);
-            System.out.println("✅ Conexión exitosa a Railway PostgreSQL.");
-        } catch (SQLException e) {
-            System.out.println("❌ Error al conectar con PostgreSQL en Railway.");
-            e.printStackTrace();
+        int intentos = 0;
+
+        while (intentos < MAX_RETRIES) {
+            try {
+                System.out.println("🔄 Intentando conectar a la base de datos...");
+                conexionABBDD = DriverManager.getConnection(url, user, password);
+                System.out.println("✅ Conexión exitosa a Neon PostgreSQL.");
+                return;
+            } catch (SQLException e) {
+                intentos++;
+                System.err.println("❌ Error al conectar con PostgreSQL. Intento " + intentos + " de " + MAX_RETRIES);
+                System.err.println("Mensaje de error: " + e.getMessage());
+                e.printStackTrace();
+
+                if (intentos >= MAX_RETRIES) {
+                    System.err.println("❌ No se pudo conectar después de " + MAX_RETRIES + " intentos.");
+                    mostrarAlerta("Error de Conexión", "No se pudo conectar a la base de datos después de " + MAX_RETRIES + " intentos.", Alert.AlertType.ERROR);
+                    break;
+                }
+
+                try {
+                    Thread.sleep(RETRY_DELAY_MS);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    System.err.println("❌ Error al esperar entre reintentos.");
+                    break;
+                }
+            }
         }
     }
-
     /* String url = "jdbc:postgresql://localhost:5432/bd_CapriRopa";
     String user = "postgres";
     String password = "GloMinte@89";*/

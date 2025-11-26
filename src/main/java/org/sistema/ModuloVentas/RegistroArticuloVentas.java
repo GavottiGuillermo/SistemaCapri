@@ -9,20 +9,28 @@ public class RegistroArticuloVentas {
     private int idArticulo;
     private double precioEfectivo;
     private double precioTransferencia;
-
+    private String publicadoEnWeb; // New field
     // Constructor
-    public RegistroArticuloVentas(int idArticulo, String estado, String nombreArticulo, String categoria,
-                    String color, String talle, double precioEfectivo, double precioTransferencia) {
+    public RegistroArticuloVentas(int idArticulo, String nombreArticulo, String estado, String categoria, String color,
+                                  String talle, double precioEfectivo, double precioTransferencia, String publicadoEnWeb) {
         this.idArticulo = idArticulo;
-        this.estado = estado;
         this.nombreArticulo = nombreArticulo;
+        this.estado = estado;
         this.categoria = categoria;
         this.color = color;
         this.talle = talle;
-        this.precioEfectivo = precioEfectivo;
+        this. precioEfectivo = precioEfectivo;
         this.precioTransferencia = precioTransferencia;
+        this.publicadoEnWeb = publicadoEnWeb;
+    }
+    // Getters and setters for the new field
+    public String getPublicadoEnWeb() {
+        return publicadoEnWeb;
     }
 
+    public void setPublicadoEnWeb(String publicadoEnWeb) {
+        this.publicadoEnWeb = publicadoEnWeb;
+    }
     // Getters y Setters
     public int getIdArticulo() {
         return idArticulo;
