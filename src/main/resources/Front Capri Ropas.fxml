@@ -538,62 +538,50 @@
                           </Label>
 
                           <!-- Search and Table Section -->
-                          <VBox spacing="10">
+                          <VBox spacing="10" VBox.vgrow="ALWAYS">
                              <HBox spacing="15" alignment="CENTER_LEFT">
                                 <Label text="Buscar:" />
                                 <TextField fx:id="fldBuscarArticuloWeb" promptText="Buscar por ID o nombre"
                                            maxWidth="250" />
                              </HBox>
 
-                             <TableView fx:id="tblProductosWeb" VBox.vgrow="ALWAYS" prefHeight="300">
+                             <TableView fx:id="tblProductosWeb" VBox.vgrow="ALWAYS" prefHeight="450">
                                 <columns>
                                    <TableColumn fx:id="colIdWeb" text="ID" prefWidth="80" />
-                                   <TableColumn fx:id="colPrendaWeb" text="Prenda" prefWidth="200" />
+                                   <TableColumn fx:id="colPrendaWeb" text="Prenda" prefWidth="250" />
                                    <TableColumn fx:id="colEstadoWeb" text="Estado" prefWidth="150" />
                                    <TableColumn fx:id="colPublicadoWeb" text="Publicado en Web" prefWidth="150" />
-                                   <TableColumn fx:id="colAccionesWeb" text="Acciones" prefWidth="150" />
+                                   <TableColumn fx:id="colAccionesWeb" text="Acciones" prefWidth="200" />
                                 </columns>
                              </TableView>
                           </VBox>
 
                           <!-- Form Section -->
-                          <GridPane hgap="15" vgap="10" maxWidth="500">
+                          <GridPane hgap="20" vgap="15">
                              <padding>
                                 <Insets top="10" />
                              </padding>
 
+                             <columnConstraints>
+                                <ColumnConstraints minWidth="100" prefWidth="120" />
+                                <ColumnConstraints minWidth="200" prefWidth="250" hgrow="SOMETIMES" />
+                                <ColumnConstraints minWidth="100" prefWidth="120" />
+                                <ColumnConstraints minWidth="200" prefWidth="250" hgrow="SOMETIMES" />
+                             </columnConstraints>
+
+                             <!-- Primera columna de campos -->
                              <Label text="Título artículo:" GridPane.columnIndex="0" GridPane.rowIndex="0" />
-                             <TextField fx:id="fldNombreTarjeta" maxWidth="250"
-                                        GridPane.columnIndex="1" GridPane.rowIndex="0" />
+                             <TextField fx:id="fldNombreTarjeta" GridPane.columnIndex="1" GridPane.rowIndex="0" />
 
                              <Label text="Texto Tarjeta:" GridPane.columnIndex="0" GridPane.rowIndex="1" />
-                             <TextField fx:id="fldTextoTarjeta" maxWidth="250"
-                                        GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                             <TextField fx:id="fldTextoTarjeta" GridPane.columnIndex="1" GridPane.rowIndex="1" />
 
                              <Label text="Precio:" GridPane.columnIndex="0" GridPane.rowIndex="2" />
-                             <TextField fx:id="fldPrecioTarjeta" maxWidth="250"
-                                        GridPane.columnIndex="1" GridPane.rowIndex="2" />
+                             <TextField fx:id="fldPrecioTarjeta" GridPane.columnIndex="1" GridPane.rowIndex="2" />
 
-                             <Label text="Talle:" GridPane.columnIndex="0" GridPane.rowIndex="6" />
-                             <ComboBox fx:id="cmbTalleWeb" maxWidth="250" GridPane.columnIndex="1" GridPane.rowIndex="6">
-                                <items>
-                                   <FXCollections fx:factory="observableArrayList">
-                                      <String fx:value="S" />
-                                      <String fx:value="M" />
-                                      <String fx:value="L" />
-                                      <String fx:value="XL" />
-                                   </FXCollections>
-                                </items>
-                             </ComboBox>
-
-                             <Label text="Detalle:" GridPane.columnIndex="0" GridPane.rowIndex="3"
-                                    GridPane.valignment="TOP" />
-                             <TextArea fx:id="fldDetalleTarjeta" prefRowCount="4" maxWidth="250"
-                                       wrapText="true" GridPane.columnIndex="1" GridPane.rowIndex="3" />
-
-                             <Label text="Categoría:" GridPane.columnIndex="0" GridPane.rowIndex="4" />
-                             <HBox spacing="10" GridPane.columnIndex="1" GridPane.rowIndex="4">
-                                <ComboBox fx:id="cmbCategoriaWeb" maxWidth="250">
+                             <Label text="Categoría:" GridPane.columnIndex="0" GridPane.rowIndex="3" />
+                             <HBox spacing="10" GridPane.columnIndex="1" GridPane.rowIndex="3">
+                                <ComboBox fx:id="cmbCategoriaWeb" prefWidth="180">
                                    <items>
                                       <FXCollections fx:factory="observableArrayList">
                                          <String fx:value="Tops" />
@@ -608,13 +596,33 @@
                                 </ComboBox>
                                 <CheckBox fx:id="chkNovedad" text="Novedad" />
                              </HBox>
-                             <Label text="Imagen:" GridPane.columnIndex="0" GridPane.rowIndex="5" />
-                             <VBox spacing="10" GridPane.columnIndex="1" GridPane.rowIndex="5">
+
+                             <!-- Segunda columna de campos -->
+                             <Label text="Talle:" GridPane.columnIndex="2" GridPane.rowIndex="0" />
+                             <ComboBox fx:id="cmbTalleWeb" GridPane.columnIndex="3" GridPane.rowIndex="0">
+                                <items>
+                                   <FXCollections fx:factory="observableArrayList">
+                                      <String fx:value="S" />
+                                      <String fx:value="M" />
+                                      <String fx:value="L" />
+                                      <String fx:value="XL" />
+                                   </FXCollections>
+                                </items>
+                             </ComboBox>
+
+                             <Label text="Imagen:" GridPane.columnIndex="2" GridPane.rowIndex="1" />
+                             <VBox spacing="10" GridPane.columnIndex="3" GridPane.rowIndex="1">
                                 <HBox spacing="10">
                                    <Button fx:id="btnSeleccionarImagen" text="Seleccionar Imagen" onAction="#seleccionarImagen" />
                                    <Label fx:id="lblImagenSeleccionada" />
                                 </HBox>
                              </VBox>
+
+                             <Label text="Detalle:" GridPane.columnIndex="2" GridPane.rowIndex="2"
+                                    GridPane.valignment="TOP" GridPane.rowSpan="2" />
+                             <TextArea fx:id="fldDetalleTarjeta" prefRowCount="4"
+                                       wrapText="true" GridPane.columnIndex="3" GridPane.rowIndex="2"
+                                       GridPane.rowSpan="2" />
                           </GridPane>
 
                           <!-- Action Button -->

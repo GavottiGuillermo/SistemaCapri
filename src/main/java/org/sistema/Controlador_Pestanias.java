@@ -146,6 +146,7 @@ public class Controlador_Pestanias implements Initializable {
     @FXML private List<RegistroGastoExtra> lstGastosExtra;
     @FXML private List<RegistroCliente> lstClientes;
     @FXML Connection conexionABBDD;
+    private boolean modoOffline = false; // Indica si la app está en modo sin conexión a BD
 
     ////////////PESTAÑA CONSULTAR/MODIFICAR LISTAS ////////////////////////
     @FXML private ComboBox<String> cmbListas;
@@ -1153,40 +1154,60 @@ public class Controlador_Pestanias implements Initializable {
         try (FileInputStream fis = new FileInputStream(in_ArchivoSeleccionado);
             Workbook workbook = new XSSFWorkbook(fis)) {
             //--------------------
-            System.out.println("Estoy procesando >>Lotes<<");
             Sheet hojaLotes = workbook.getSheet("Lotes");
-            cargarListaLotes(hojaLotes);
-            conectarABBDDConReintentos();
-            cargarListaLotesABBDD(lstLotes);
-            desconexionABBDD();
+            if (hojaLotes != null) {
+                System.out.println("Estoy procesando >>Lotes<<");
+                cargarListaLotes(hojaLotes);
+                conectarABBDDConReintentos();
+                cargarListaLotesABBDD(lstLotes);
+                desconexionABBDD();
+            } else {
+                System.out.println("Hoja 'Lotes' no encontrada, saltando...");
+            }
             //-----------------------
-            System.out.println("Estoy procesando >>Productos<<");
             Sheet hojaProductos = workbook.getSheet("Productos");
-            cargarListaProductos(hojaProductos);
-            conectarABBDDConReintentos();
-            cargarListaProductosABBDD(lstProductos);
-            desconexionABBDD();
+            if (hojaProductos != null) {
+                System.out.println("Estoy procesando >>Productos<<");
+                cargarListaProductos(hojaProductos);
+                conectarABBDDConReintentos();
+                cargarListaProductosABBDD(lstProductos);
+                desconexionABBDD();
+            } else {
+                System.out.println("Hoja 'Productos' no encontrada, saltando...");
+            }
             //-----------------------
-            System.out.println("Estoy procesando >>Pagos<<");
             Sheet hojaPagos = workbook.getSheet("Pagos");
-            cargarListaPagos(hojaPagos);
-            conectarABBDDConReintentos();
-            cargarListaPagosABBDD(lstPagos);
-            desconexionABBDD();
+            if (hojaPagos != null) {
+                System.out.println("Estoy procesando >>Pagos<<");
+                cargarListaPagos(hojaPagos);
+                conectarABBDDConReintentos();
+                cargarListaPagosABBDD(lstPagos);
+                desconexionABBDD();
+            } else {
+                System.out.println("Hoja 'Pagos' no encontrada, saltando...");
+            }
             //-----------------------
-            System.out.println("Estoy procesando >>Gastos Extra<<");
             Sheet hojaGastosExtra = workbook.getSheet("Gastos Extra");
-            cargarListaGastosExtra(hojaGastosExtra);
-            conectarABBDDConReintentos();
-            cargarListaGastosExtraABBDD(lstGastosExtra);
-            desconexionABBDD();
+            if (hojaGastosExtra != null) {
+                System.out.println("Estoy procesando >>Gastos Extra<<");
+                cargarListaGastosExtra(hojaGastosExtra);
+                conectarABBDDConReintentos();
+                cargarListaGastosExtraABBDD(lstGastosExtra);
+                desconexionABBDD();
+            } else {
+                System.out.println("Hoja 'Gastos Extra' no encontrada, saltando...");
+            }
             //-----------------------
-            System.out.println("Estoy procesando >>Clientes<<");
             Sheet hojaClientes = workbook.getSheet("Clientes");
-            cargarListaClientes(hojaClientes);
-            conectarABBDDConReintentos();
-            cargarListaClientesABBDD(lstClientes);
-            desconexionABBDD();
+            if (hojaClientes != null) {
+                System.out.println("Estoy procesando >>Clientes<<");
+                cargarListaClientes(hojaClientes);
+                conectarABBDDConReintentos();
+                cargarListaClientesABBDD(lstClientes);
+                desconexionABBDD();
+            } else {
+                System.out.println("Hoja 'Clientes' no encontrada, saltando...");
+            }
             mostrarAlerta("Carga Masiva", "Archivo cargado correctamente a Base de Datos", Alert.AlertType.INFORMATION);
             resetearCargaArchivo();
         } catch (FileNotFoundException e) {
@@ -1229,22 +1250,43 @@ public class Controlador_Pestanias implements Initializable {
 
     private void cargarListaProductos(Sheet hojaXLS) {
         Row filaPrimerDato = hojaXLS.getRow(1);
+        if (filaPrimerDato == null) {
+            System.out.println("No hay datos en la hoja Productos");
+            return;
+        }
+
         Cell celdaPrimerDato = filaPrimerDato.getCell(0);
         if (celdaPrimerDato != null) {
             for (int i = 1; i <= hojaXLS.getLastRowNum(); i++) {
                 Row fila = hojaXLS.getRow(i);
-                Cell celdaIdArticulo = fila.getCell(0);
-                if (celdaIdArticulo != null){
-                    Cell celdaEstado = fila.getCell(1);
-                    Cell celdaNombrePrenda = fila.getCell(2);
-                    Cell celdaCategoria = fila.getCell(3);
-                    Cell celdaColor = fila.getCell(4);
-                    Cell celdaTalle = fila.getCell(5);
-                    Cell celdaPrecioCompra = fila.getCell(6);
-                    Cell celdaPrecioVentaEfectivo = fila.getCell(7);
-                    Cell celdaPrecioVentaTransf = fila.getCell(8);
-                    Cell celdaId_Lote = fila.getCell(9);
+                if (fila == null) continue;
 
+                // Formato: Estado | Prenda | Categoria | Color | Talle | Precio Compra | Precio Venta Efectivo | Precio Venta Transferencia | Id Lote | id_pago
+                Cell celdaEstado = fila.getCell(0);
+
+                // Validar que la fila tenga datos (al menos el estado)
+                if (celdaEstado == null || celdaEstado.toString().trim().isEmpty()) {
+                    continue;
+                }
+
+                Cell celdaNombrePrenda = fila.getCell(1);
+                Cell celdaCategoria = fila.getCell(2);
+                Cell celdaColor = fila.getCell(3);
+                Cell celdaTalle = fila.getCell(4);
+                Cell celdaPrecioCompra = fila.getCell(5);
+                Cell celdaPrecioVentaEfectivo = fila.getCell(6);
+                Cell celdaPrecioVentaTransf = fila.getCell(7);
+                Cell celdaId_Lote = fila.getCell(8);
+
+                // Validar que las celdas requeridas no sean null
+                if (celdaNombrePrenda == null || celdaCategoria == null || celdaColor == null ||
+                    celdaTalle == null || celdaPrecioCompra == null || celdaPrecioVentaEfectivo == null ||
+                    celdaPrecioVentaTransf == null) {
+                    System.out.println("Fila " + i + " tiene celdas vacías, saltando...");
+                    continue;
+                }
+
+                try {
                     System.out.println(celdaEstado.getStringCellValue());
                     System.out.println(celdaNombrePrenda.getStringCellValue());
                     System.out.println(celdaCategoria.getStringCellValue());
@@ -1253,12 +1295,28 @@ public class Controlador_Pestanias implements Initializable {
                     System.out.println(celdaPrecioCompra.getNumericCellValue());
                     System.out.println(celdaPrecioVentaEfectivo.getNumericCellValue());
                     System.out.println(celdaPrecioVentaTransf.getNumericCellValue());
-                    System.out.println((int)celdaId_Lote.getNumericCellValue());
 
-                    RegistroProducto registroProducto = new RegistroProducto(celdaEstado.getStringCellValue(),
-                            celdaNombrePrenda.toString(), celdaCategoria.toString(), celdaColor.toString()
-                            , celdaTalle.toString(), celdaPrecioCompra.getColumnIndex(), celdaPrecioVentaEfectivo.getNumericCellValue(),
-                            celdaPrecioVentaTransf.getNumericCellValue(), (int) celdaId_Lote.getNumericCellValue());
+                    // Id_Lote puede ser null o vacío
+                    int idLote = 0;
+                    if (celdaId_Lote != null && celdaId_Lote.getCellType() != CellType.BLANK) {
+                        try {
+                            idLote = (int) celdaId_Lote.getNumericCellValue();
+                            System.out.println("Id Lote: " + idLote);
+                        } catch (Exception e) {
+                            System.out.println("Id Lote vacío o inválido, usando 0");
+                        }
+                    }
+
+                    RegistroProducto registroProducto = new RegistroProducto(
+                            celdaEstado.getStringCellValue(),
+                            celdaNombrePrenda.getStringCellValue(),
+                            celdaCategoria.getStringCellValue(),
+                            celdaColor.getStringCellValue(),
+                            celdaTalle.getStringCellValue(),
+                            celdaPrecioCompra.getNumericCellValue(),
+                            celdaPrecioVentaEfectivo.getNumericCellValue(),
+                            celdaPrecioVentaTransf.getNumericCellValue(),
+                            idLote);
 
                     registroProducto.setEstado(celdaEstado.getStringCellValue());
                     registroProducto.setNombrePrenda(celdaNombrePrenda.getStringCellValue());
@@ -1271,6 +1329,9 @@ public class Controlador_Pestanias implements Initializable {
                     System.out.println("-----------------------------------------");
 
                     lstProductos.add(registroProducto);
+                } catch (Exception e) {
+                    System.out.println("Error procesando fila " + i + ": " + e.getMessage());
+                    e.printStackTrace();
                 }
 
             }
@@ -1382,7 +1443,15 @@ public class Controlador_Pestanias implements Initializable {
                     stmt.setDouble(6, listaProductos.get(i).getPrecioCompra());
                     stmt.setDouble(7, listaProductos.get(i).getPrecioVentaEfectivo());
                     stmt.setDouble(8, listaProductos.get(i).getPrecioVentaTransf());
-                    stmt.setInt(9, listaProductos.get(i).getId_lote());
+
+                    // Si id_lote es 0, enviar NULL a la base de datos
+                    int idLote = listaProductos.get(i).getId_lote();
+                    if (idLote == 0) {
+                        stmt.setNull(9, java.sql.Types.INTEGER);
+                    } else {
+                        stmt.setInt(9, idLote);
+                    }
+
                     System.out.println("------------------Cargando a bd---------------------");
                     System.out.println(listaProductos.get(i).getEstado());
                     System.out.println(listaProductos.get(i).getNombrePrenda());
@@ -2307,6 +2376,7 @@ public class Controlador_Pestanias implements Initializable {
                 System.out.println("🔄 Intentando conectar a la base de datos...");
                 conexionABBDD = DriverManager.getConnection(url, user, password);
                 System.out.println("✅ Conexión exitosa a Neon PostgreSQL.");
+                modoOffline = false;
                 return;
             } catch (SQLException e) {
                 intentos++;
@@ -2315,8 +2385,17 @@ public class Controlador_Pestanias implements Initializable {
                 e.printStackTrace();
 
                 if (intentos >= MAX_RETRIES) {
-                    System.err.println("❌ No se pudo conectar después de " + MAX_RETRIES + " intentos.");
-                    mostrarAlerta("Error de Conexión", "No se pudo conectar a la base de datos después de " + MAX_RETRIES + " intentos.", Alert.AlertType.ERROR);
+                    System.err.println("⚠️ No se pudo conectar después de " + MAX_RETRIES + " intentos.");
+                    System.err.println("🔶 Iniciando en MODO OFFLINE - Funcionalidades limitadas");
+                    modoOffline = true;
+
+                    Platform.runLater(() -> {
+                        mostrarAlerta("Modo Offline",
+                            "No se pudo conectar a la base de datos.\n\n" +
+                            "La aplicación continuará en MODO OFFLINE con funcionalidades limitadas.\n" +
+                            "Algunas funciones que requieren base de datos no estarán disponibles.",
+                            Alert.AlertType.WARNING);
+                    });
                     break;
                 }
 
@@ -2345,6 +2424,23 @@ public class Controlador_Pestanias implements Initializable {
                 throw new RuntimeException(e);
             }
         }
+    }
+
+    /**
+     * Verifica si hay conexión a la base de datos antes de realizar operaciones
+     * @return true si hay conexión, false si está en modo offline
+     */
+    private boolean verificarConexionBD() {
+        if (modoOffline || conexionABBDD == null) {
+            Platform.runLater(() -> {
+                mostrarAlerta("Modo Offline",
+                    "Esta función requiere conexión a la base de datos.\n" +
+                    "Actualmente la aplicación está en modo offline.",
+                    Alert.AlertType.INFORMATION);
+            });
+            return false;
+        }
+        return true;
     }
 
 }
