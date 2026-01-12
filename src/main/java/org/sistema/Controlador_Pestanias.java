@@ -191,6 +191,7 @@ public class Controlador_Pestanias implements Initializable {
     @FXML private Label lblImagenSeleccionada;
     @FXML private ComboBox cmbTalleWeb;
     @FXML private CheckBox chkNovedad;
+    @FXML private VBox dropZoneImagen;
     private File imagenSeleccionada;
 
     private FilteredList<RegistroArticuloVentas> productosFiltrados;
@@ -201,6 +202,7 @@ public class Controlador_Pestanias implements Initializable {
             configurarTablaWeb();
             configurarSeleccionTablaWeb();
             configurarFiltroTablaWeb();
+            configurarDragAndDropImagen();
             obtenerProductosDesdeBD();
             GoogleCloudConfig.configureGoogleCredentials();
             ////////////PESTAÑA VENTAS ////////////////////////
@@ -398,6 +400,63 @@ public class Controlador_Pestanias implements Initializable {
             });
         }
     }
+
+    private void configurarDragAndDropImagen() {
+        if (dropZoneImagen == null) {
+            System.err.println("dropZoneImagen no está inicializado");
+            return;
+        }
+
+        // Configurar eventos de drag over (cuando el archivo está sobre la zona)
+        dropZoneImagen.setOnDragOver(event -> {
+            if (event.getGestureSource() != dropZoneImagen && event.getDragboard().hasFiles()) {
+                event.acceptTransferModes(javafx.scene.input.TransferMode.COPY);
+                // Cambiar estilo para indicar que se puede soltar
+                dropZoneImagen.setStyle("-fx-border-color: #4CAF50; -fx-border-style: dashed; -fx-border-width: 2; -fx-background-color: #e8f5e9;");
+            }
+            event.consume();
+        });
+
+        // Configurar evento cuando el drag sale de la zona
+        dropZoneImagen.setOnDragExited(event -> {
+            // Restaurar estilo original
+            dropZoneImagen.setStyle("-fx-border-color: #cccccc; -fx-border-style: dashed; -fx-border-width: 2; -fx-background-color: #f9f9f9;");
+            event.consume();
+        });
+
+        // Configurar evento cuando se suelta el archivo
+        dropZoneImagen.setOnDragDropped(event -> {
+            javafx.scene.input.Dragboard db = event.getDragboard();
+            boolean success = false;
+
+            if (db.hasFiles()) {
+                java.util.List<java.io.File> files = db.getFiles();
+                if (!files.isEmpty()) {
+                    java.io.File file = files.get(0);
+
+                    // Validar que sea una imagen
+                    String fileName = file.getName().toLowerCase();
+                    if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") ||
+                        fileName.endsWith(".png") || fileName.endsWith(".gif") || fileName.endsWith(".bmp")) {
+
+                        imagenSeleccionada = file;
+                        lblImagenSeleccionada.setText(file.getName());
+                        mostrarAlerta("Imagen Seleccionada", "Imagen cargada: " + file.getName(), Alert.AlertType.INFORMATION);
+                        success = true;
+                    } else {
+                        mostrarAlerta("Error", "Por favor selecciona un archivo de imagen válido (jpg, jpeg, png, gif, bmp)", Alert.AlertType.ERROR);
+                    }
+                }
+            }
+
+            event.setDropCompleted(success);
+            event.consume();
+
+            // Restaurar estilo original
+            dropZoneImagen.setStyle("-fx-border-color: #cccccc; -fx-border-style: dashed; -fx-border-width: 2; -fx-background-color: #f9f9f9;");
+        });
+    }
+
     @FXML
     private void configurarSeleccionTablaWeb() {
         tblProductosWeb.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
@@ -424,22 +483,39 @@ public class Controlador_Pestanias implements Initializable {
 
         String carpeta = null;
         try {
+            // Obtener valores de los campos, usando "null" para campos vacíos
             String titulo = fldNombreTarjeta.getText();
-            String texto = fldTextoTarjeta.getText();
-            int precio = Integer.parseInt(fldPrecioTarjeta.getText());
-            String detalle = fldDetalleTarjeta.getText();
-            String categoria = cmbCategoriaWeb.getValue();
-            String talle = (String) cmbTalleWeb.getValue(); // Get the selected size
-            int idArticulo = tblProductosWeb.getSelectionModel().getSelectedItem().getIdArticulo();
+            titulo = (titulo == null || titulo.trim().isEmpty()) ? "null" : titulo.trim();
 
-            if (titulo.isEmpty() || texto.isEmpty() || fldPrecioTarjeta.getText().isEmpty() ||
-                    detalle.isEmpty() || categoria == null || talle == null) {
-                mostrarAlerta("Error", "Todos los campos son obligatorios", Alert.AlertType.ERROR);
-                return;
+            String texto = fldTextoTarjeta.getText();
+            texto = (texto == null || texto.trim().isEmpty()) ? "null" : texto.trim();
+
+            String precioStr = fldPrecioTarjeta.getText();
+            int precio = 0;
+            if (precioStr != null && !precioStr.trim().isEmpty()) {
+                try {
+                    precio = Integer.parseInt(precioStr.trim());
+                } catch (NumberFormatException e) {
+                    mostrarAlerta("Error", "El precio debe ser un número válido", Alert.AlertType.ERROR);
+                    return;
+                }
             }
 
-            // Update the price in the database
-            actualizarPrecioVentaTransferencia(idArticulo, precio);
+            String detalle = fldDetalleTarjeta.getText();
+            detalle = (detalle == null || detalle.trim().isEmpty()) ? "null" : detalle.trim();
+
+            String categoria = cmbCategoriaWeb.getValue();
+            categoria = (categoria == null || categoria.trim().isEmpty()) ? "null" : categoria.trim();
+
+            String talle = (String) cmbTalleWeb.getValue();
+            talle = (talle == null || talle.trim().isEmpty()) ? "null" : talle.trim();
+
+            int idArticulo = tblProductosWeb.getSelectionModel().getSelectedItem().getIdArticulo();
+
+            // Update the price in the database only if price is valid
+            if (precio > 0) {
+                actualizarPrecioVentaTransferencia(idArticulo, precio);
+            }
 
             // Generate the base name for the files
             String nombreBase = idArticulo + "-" + tblProductosWeb.getSelectionModel().getSelectedItem().getNombreArticulo();
@@ -449,7 +525,7 @@ public class Controlador_Pestanias implements Initializable {
             String contenido = String.format("{%s}\n{%s}\n{%d}\n{%s}\n{%s}",
                     titulo, texto, precio, talle, detalle);
             File archivoTxt = File.createTempFile("temp_", ".txt");
-            Files.write(archivoTxt.toPath(), contenido.getBytes());
+            Files.write(archivoTxt.toPath(), contenido.getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
             // Upload the .txt file and get its URL
             String rutaTxt = carpeta + nombreBase + ".txt";
@@ -520,28 +596,45 @@ public class Controlador_Pestanias implements Initializable {
                 return;
             }
 
-            String jsonContent = new String(jsonBlob.getContent());
+            String jsonContent = new String(jsonBlob.getContent(), java.nio.charset.StandardCharsets.UTF_8);
             JSONArray jsonArray = new JSONArray(jsonContent);
 
-            // Remove the node matching the folder name
+            // Remove the node matching the id_articulo (only the number before the dash)
             boolean nodeRemoved = false;
+            String idArticuloStr = String.valueOf(producto.getIdArticulo());
+            String carpetaActual = null;
+
             for (int i = 0; i < jsonArray.length(); i++) {
                 JSONObject productNode = jsonArray.getJSONObject(i);
-                if (productNode.optString("carpeta").equals(folderName)) {
-                    jsonArray.remove(i);
-                    nodeRemoved = true;
-                    break;
+                String carpeta = productNode.optString("carpeta");
+
+                // Extract the id_articulo from the folder name (before the dash)
+                if (carpeta != null && carpeta.contains("-")) {
+                    String idEnCarpeta = carpeta.substring(0, carpeta.indexOf("-"));
+                    if (idEnCarpeta.equals(idArticuloStr)) {
+                        carpetaActual = carpeta; // Save the actual folder name from JSON
+                        jsonArray.remove(i);
+                        nodeRemoved = true;
+                        break;
+                    }
                 }
             }
 
             if (!nodeRemoved) {
-                mostrarAlerta("Error", "No se encontró el nodo correspondiente en productos.json.", Alert.AlertType.ERROR);
+                mostrarAlerta("Error", "No se encontró el producto con ID " + idArticuloStr + " en productos.json.", Alert.AlertType.ERROR);
                 return;
             }
 
+            // Update folderPath with the actual folder name from JSON
+            if (carpetaActual != null) {
+                folderPath = "Novedades/" + carpetaActual;
+            }
+
             // Upload the updated productos.json
-            storage.create(BlobInfo.newBuilder("imagenes-web-capri", jsonFilePath).build(),
-                    jsonArray.toString().getBytes());
+            storage.create(BlobInfo.newBuilder("imagenes-web-capri", jsonFilePath)
+                            .setContentType("application/json; charset=utf-8")
+                            .build(),
+                    jsonArray.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
             // Delete the folder and its contents
             Page<Blob> blobs = storage.list("imagenes-web-capri", Storage.BlobListOption.prefix(folderPath));
@@ -647,7 +740,7 @@ public class Controlador_Pestanias implements Initializable {
                 productos = new JSONArray(); // Create a new JSON array
             } else {
                 // Read the existing content
-                String contenidoJson = new String(blob.getContent());
+                String contenidoJson = new String(blob.getContent(), java.nio.charset.StandardCharsets.UTF_8);
                 productos = contenidoJson.isEmpty() ? new JSONArray() : new JSONArray(contenidoJson);
             }
 
@@ -667,8 +760,10 @@ public class Controlador_Pestanias implements Initializable {
 
             // Write the updated JSON back to the bucket
             BlobId blobId = BlobId.of("imagenes-web-capri", "productos.json");
-            BlobInfo blobInfo = BlobInfo.newBuilder(blobId).setContentType("application/json").build();
-            storage.create(blobInfo, productos.toString().getBytes());
+            BlobInfo blobInfo = BlobInfo.newBuilder(blobId)
+                    .setContentType("application/json; charset=utf-8")
+                    .build();
+            storage.create(blobInfo, productos.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
             System.out.println("productos.json actualizado correctamente.");
         } catch (Exception e) {
@@ -1222,27 +1317,112 @@ public class Controlador_Pestanias implements Initializable {
         btnCargarArchivo.setDisable(true);
     }
 
+    /**
+     * Método helper para obtener el valor de una celda como String,
+     * manejando diferentes tipos de celda (NUMERIC, STRING, FORMULA, etc.)
+     */
+    private String obtenerValorCeldaComoString(Cell celda) {
+        if (celda == null) {
+            return "";
+        }
+
+        switch (celda.getCellType()) {
+            case STRING:
+                return celda.getStringCellValue();
+            case NUMERIC:
+                if (DateUtil.isCellDateFormatted(celda)) {
+                    // Si es una fecha, formatearla como String
+                    SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+                    return sdf.format(celda.getDateCellValue());
+                } else {
+                    // Si es un número, convertirlo a String
+                    double valor = celda.getNumericCellValue();
+                    // Si es un número entero, no mostrar decimales
+                    if (valor == (long) valor) {
+                        return String.valueOf((long) valor);
+                    } else {
+                        return String.valueOf(valor);
+                    }
+                }
+            case BOOLEAN:
+                return String.valueOf(celda.getBooleanCellValue());
+            case FORMULA:
+                // Para fórmulas, intentar obtener el valor calculado
+                try {
+                    return celda.getStringCellValue();
+                } catch (IllegalStateException e) {
+                    try {
+                        double valor = celda.getNumericCellValue();
+                        if (valor == (long) valor) {
+                            return String.valueOf((long) valor);
+                        } else {
+                            return String.valueOf(valor);
+                        }
+                    } catch (IllegalStateException ex) {
+                        return "";
+                    }
+                }
+            case BLANK:
+                return "";
+            default:
+                return "";
+        }
+    }
+
     private void cargarListaLotes(Sheet hojaXLS) {
         Row filaPrimerDato = hojaXLS.getRow(1);
         Cell celdaPrimerDato = filaPrimerDato.getCell(0);
         if (celdaPrimerDato != null) {
             for (int i = 1; i <= hojaXLS.getLastRowNum(); i++) {
                 Row fila = hojaXLS.getRow(i);
+                if (fila == null) continue;
+
                 Cell celdaIdLote = fila.getCell(0);
                 Cell celdaFecha = fila.getCell(1);
                 Cell celdaCosto = fila.getCell(2);
                 Cell celdaLocal = fila.getCell(3);
                 Cell celdaInversor = fila.getCell(4);
 
-                RegistroLote registroLote = new RegistroLote((int) celdaIdLote.getNumericCellValue(), celdaFecha.getStringCellValue(),
-                        celdaCosto.getNumericCellValue(), celdaLocal.getStringCellValue(), celdaInversor.getStringCellValue());
+                // Validar que las celdas requeridas no sean null
+                if (celdaIdLote == null || celdaFecha == null || celdaCosto == null) {
+                    continue;
+                }
 
-                registroLote.setId_lote((int) celdaIdLote.getNumericCellValue());
-                registroLote.setFecha(celdaFecha.getStringCellValue());
-                registroLote.setCosto(celdaCosto.getNumericCellValue());
-                registroLote.setLocal(celdaLocal.getStringCellValue());
-                registroLote.setInversor(celdaInversor.getStringCellValue());
+                // Obtener valores manejando correctamente los tipos de celda
+                int idLote = 0;
+                try {
+                    if (celdaIdLote.getCellType() == CellType.NUMERIC) {
+                        idLote = (int) celdaIdLote.getNumericCellValue();
+                    } else {
+                        idLote = Integer.parseInt(obtenerValorCeldaComoString(celdaIdLote));
+                    }
+                } catch (Exception e) {
+                    System.out.println("Error al leer id_lote en fila " + (i+1) + ": " + e.getMessage());
+                    continue;
+                }
 
+                String fecha = obtenerValorCeldaComoString(celdaFecha);
+                fecha = (fecha == null || fecha.trim().isEmpty()) ? null : fecha.trim();
+
+                double costo = 0;
+                try {
+                    if (celdaCosto.getCellType() == CellType.NUMERIC) {
+                        costo = celdaCosto.getNumericCellValue();
+                    } else {
+                        costo = Double.parseDouble(obtenerValorCeldaComoString(celdaCosto));
+                    }
+                } catch (Exception e) {
+                    System.out.println("Error al leer costo en fila " + (i+1) + ": " + e.getMessage());
+                    continue;
+                }
+
+                String local = obtenerValorCeldaComoString(celdaLocal);
+                local = (local == null || local.trim().isEmpty()) ? null : local.trim();
+
+                String inversor = obtenerValorCeldaComoString(celdaInversor);
+                inversor = (inversor == null || inversor.trim().isEmpty()) ? null : inversor.trim();
+
+                RegistroLote registroLote = new RegistroLote(idLote, fecha, costo, local, inversor);
                 lstLotes.add(registroLote);
             }
         }
@@ -1261,71 +1441,135 @@ public class Controlador_Pestanias implements Initializable {
                 Row fila = hojaXLS.getRow(i);
                 if (fila == null) continue;
 
-                // Formato: Estado | Prenda | Categoria | Color | Talle | Precio Compra | Precio Venta Efectivo | Precio Venta Transferencia | Id Lote | id_pago
-                Cell celdaEstado = fila.getCell(0);
+                // Formato Excel: ID (col 0 - se ignora, autoincremental en BD) | Estado | Prenda | Categoria | Color | Talle | Precio Compra | Precio Venta Efectivo | Precio Venta Transferencia | Id Lote
+                // Saltamos la columna 0 (ID) porque es autoincremental en la base de datos
+                Cell celdaEstado = fila.getCell(1);  // Antes era 0, ahora 1
 
                 // Validar que la fila tenga datos (al menos el estado)
                 if (celdaEstado == null || celdaEstado.toString().trim().isEmpty()) {
                     continue;
                 }
 
-                Cell celdaNombrePrenda = fila.getCell(1);
-                Cell celdaCategoria = fila.getCell(2);
-                Cell celdaColor = fila.getCell(3);
-                Cell celdaTalle = fila.getCell(4);
-                Cell celdaPrecioCompra = fila.getCell(5);
-                Cell celdaPrecioVentaEfectivo = fila.getCell(6);
-                Cell celdaPrecioVentaTransf = fila.getCell(7);
-                Cell celdaId_Lote = fila.getCell(8);
+                Cell celdaNombrePrenda = fila.getCell(2);  // Antes era 1, ahora 2
+                Cell celdaCategoria = fila.getCell(3);     // Antes era 2, ahora 3
+                Cell celdaColor = fila.getCell(4);         // Antes era 3, ahora 4
+                Cell celdaTalle = fila.getCell(5);         // Antes era 4, ahora 5
+                Cell celdaPrecioCompra = fila.getCell(6);  // Antes era 5, ahora 6
+                Cell celdaPrecioVentaEfectivo = fila.getCell(7);  // Antes era 6, ahora 7
+                Cell celdaPrecioVentaTransf = fila.getCell(8);    // Antes era 7, ahora 8
+                Cell celdaId_Lote = fila.getCell(9);       // Antes era 8, ahora 9
 
                 // Validar que las celdas requeridas no sean null
-                if (celdaNombrePrenda == null || celdaCategoria == null || celdaColor == null ||
-                    celdaTalle == null || celdaPrecioCompra == null || celdaPrecioVentaEfectivo == null ||
-                    celdaPrecioVentaTransf == null) {
-                    System.out.println("Fila " + i + " tiene celdas vacías, saltando...");
+                // Según el esquema: categoria, talle, precio_compra, precio_venta_efectivo, precio_venta_transferencia son NOT NULL
+                if (celdaCategoria == null || celdaTalle == null || celdaPrecioCompra == null ||
+                    celdaPrecioVentaEfectivo == null || celdaPrecioVentaTransf == null) {
+                    System.out.println("Fila " + (i+1) + " tiene celdas requeridas vacías (categoría, talle o precios), saltando...");
                     continue;
                 }
 
                 try {
-                    System.out.println(celdaEstado.getStringCellValue());
-                    System.out.println(celdaNombrePrenda.getStringCellValue());
-                    System.out.println(celdaCategoria.getStringCellValue());
-                    System.out.println(celdaColor.getStringCellValue());
-                    System.out.println(celdaTalle.getStringCellValue());
-                    System.out.println(celdaPrecioCompra.getNumericCellValue());
-                    System.out.println(celdaPrecioVentaEfectivo.getNumericCellValue());
-                    System.out.println(celdaPrecioVentaTransf.getNumericCellValue());
+                    // Obtener valores de texto (pueden ser null si están vacíos)
+                    String estado = obtenerValorCeldaComoString(celdaEstado);
+                    estado = (estado == null || estado.trim().isEmpty()) ? null : estado.trim();
+
+                    String nombrePrenda = obtenerValorCeldaComoString(celdaNombrePrenda);
+                    nombrePrenda = (nombrePrenda == null || nombrePrenda.trim().isEmpty()) ? null : nombrePrenda.trim();
+
+                    String categoria = obtenerValorCeldaComoString(celdaCategoria);
+                    categoria = (categoria == null || categoria.trim().isEmpty()) ? null : categoria.trim();
+
+                    String color = obtenerValorCeldaComoString(celdaColor);
+                    color = (color == null || color.trim().isEmpty()) ? null : color.trim();
+
+                    String talle = obtenerValorCeldaComoString(celdaTalle);
+                    talle = (talle == null || talle.trim().isEmpty()) ? null : talle.trim();
+
+                    System.out.println("Fila " + (i+1) + ": " + estado + " | " + nombrePrenda + " | " + categoria + " | " + color + " | " + talle);
+
+                    // Parsear Precio Compra con validación (null si no hay valor válido)
+                    Double precioCompra = null;
+                    String precioCompraStr = obtenerValorCeldaComoString(celdaPrecioCompra);
+                    try {
+                        if (celdaPrecioCompra.getCellType() == CellType.NUMERIC) {
+                            precioCompra = celdaPrecioCompra.getNumericCellValue();
+                        } else if (precioCompraStr != null && !precioCompraStr.trim().isEmpty()) {
+                            precioCompraStr = precioCompraStr.trim().replace(",", ".");
+                            precioCompra = Double.parseDouble(precioCompraStr);
+                        }
+                    } catch (NumberFormatException e) {
+                        System.err.println("Error en fila " + (i+1) + ": No se pudo convertir precio_compra '" + precioCompraStr + "' a número. Usando NULL.");
+                        precioCompra = null;
+                    }
+
+                    // Parsear Precio Venta Efectivo con validación (null si no hay valor válido)
+                    Double precioVentaEfectivo = null;
+                    String precioEfectivoStr = obtenerValorCeldaComoString(celdaPrecioVentaEfectivo);
+                    try {
+                        if (celdaPrecioVentaEfectivo.getCellType() == CellType.NUMERIC) {
+                            precioVentaEfectivo = celdaPrecioVentaEfectivo.getNumericCellValue();
+                        } else if (precioEfectivoStr != null && !precioEfectivoStr.trim().isEmpty()) {
+                            precioEfectivoStr = precioEfectivoStr.trim().replace(",", ".");
+                            precioVentaEfectivo = Double.parseDouble(precioEfectivoStr);
+                        }
+                    } catch (NumberFormatException e) {
+                        System.err.println("Error en fila " + (i+1) + ": No se pudo convertir precio_venta_efectivo '" + precioEfectivoStr + "' a número. Usando NULL.");
+                        precioVentaEfectivo = null;
+                    }
+
+                    // Parsear Precio Venta Transferencia con validación (null si no hay valor válido)
+                    Double precioVentaTransf = null;
+                    String precioTransfStr = obtenerValorCeldaComoString(celdaPrecioVentaTransf);
+                    try {
+                        if (celdaPrecioVentaTransf.getCellType() == CellType.NUMERIC) {
+                            precioVentaTransf = celdaPrecioVentaTransf.getNumericCellValue();
+                        } else if (precioTransfStr != null && !precioTransfStr.trim().isEmpty()) {
+                            precioTransfStr = precioTransfStr.trim().replace(",", ".");
+                            precioVentaTransf = Double.parseDouble(precioTransfStr);
+                        }
+                    } catch (NumberFormatException e) {
+                        System.err.println("Error en fila " + (i+1) + ": No se pudo convertir precio_venta_transf '" + precioTransfStr + "' a número. Usando NULL.");
+                        precioVentaTransf = null;
+                    }
+
+                    System.out.println("  Precios: Compra=" + precioCompra + " | Efectivo=" + precioVentaEfectivo + " | Transf=" + precioVentaTransf);
 
                     // Id_Lote puede ser null o vacío
                     int idLote = 0;
                     if (celdaId_Lote != null && celdaId_Lote.getCellType() != CellType.BLANK) {
                         try {
-                            idLote = (int) celdaId_Lote.getNumericCellValue();
+                            if (celdaId_Lote.getCellType() == CellType.NUMERIC) {
+                                idLote = (int) celdaId_Lote.getNumericCellValue();
+                            } else {
+                                idLote = Integer.parseInt(obtenerValorCeldaComoString(celdaId_Lote));
+                            }
                             System.out.println("Id Lote: " + idLote);
                         } catch (Exception e) {
                             System.out.println("Id Lote vacío o inválido, usando 0");
                         }
                     }
 
+                    // Crear el registro usando 0 como valor por defecto para precios null (requerido por el constructor)
+                    // Pero guardaremos la información de si era null para insertar NULL en la BD
                     RegistroProducto registroProducto = new RegistroProducto(
-                            celdaEstado.getStringCellValue(),
-                            celdaNombrePrenda.getStringCellValue(),
-                            celdaCategoria.getStringCellValue(),
-                            celdaColor.getStringCellValue(),
-                            celdaTalle.getStringCellValue(),
-                            celdaPrecioCompra.getNumericCellValue(),
-                            celdaPrecioVentaEfectivo.getNumericCellValue(),
-                            celdaPrecioVentaTransf.getNumericCellValue(),
+                            estado,
+                            nombrePrenda,
+                            categoria,
+                            color,
+                            talle,
+                            precioCompra != null ? precioCompra : 0.0,
+                            precioVentaEfectivo != null ? precioVentaEfectivo : 0.0,
+                            precioVentaTransf != null ? precioVentaTransf : 0.0,
                             idLote);
 
-                    registroProducto.setEstado(celdaEstado.getStringCellValue());
-                    registroProducto.setNombrePrenda(celdaNombrePrenda.getStringCellValue());
-                    registroProducto.setCategoria(celdaCategoria.getStringCellValue());
-                    registroProducto.setColor(celdaColor.getStringCellValue());
-                    registroProducto.setTalle(celdaTalle.getStringCellValue());
-                    registroProducto.setPrecioCompra(celdaPrecioCompra.getNumericCellValue());
-                    registroProducto.setPrecioVentaEfectivo(celdaPrecioVentaEfectivo.getNumericCellValue());
-                    registroProducto.setPrecioVentaTransf(celdaPrecioVentaTransf.getNumericCellValue());
+                    // Establecer los valores (manteniendo los null en memoria para la lógica de inserción)
+                    registroProducto.setEstado(estado);
+                    registroProducto.setNombrePrenda(nombrePrenda);
+                    registroProducto.setCategoria(categoria);
+                    registroProducto.setColor(color);
+                    registroProducto.setTalle(talle);
+                    registroProducto.setPrecioCompra(precioCompra != null ? precioCompra : 0.0);
+                    registroProducto.setPrecioVentaEfectivo(precioVentaEfectivo != null ? precioVentaEfectivo : 0.0);
+                    registroProducto.setPrecioVentaTransf(precioVentaTransf != null ? precioVentaTransf : 0.0);
                     System.out.println("-----------------------------------------");
 
                     lstProductos.add(registroProducto);
@@ -1344,16 +1588,39 @@ public class Controlador_Pestanias implements Initializable {
         if (celdaPrimerDato != null) {
             for (int i = 1; i <= hojaXLS.getLastRowNum(); i++) {
                 Row fila = hojaXLS.getRow(i);
+                if (fila == null) continue;
+
                 Cell celdaFecha = fila.getCell(0);
                 Cell celdaMonto = fila.getCell(1);
                 Cell celdaNombreCliente = fila.getCell(2);
                 Cell celdaMetodoPago = fila.getCell(3);
-                RegistroPago registroPago = new RegistroPago(celdaFecha.getStringCellValue(), celdaMonto.getNumericCellValue(), celdaNombreCliente.toString()
-                        , celdaMetodoPago.toString());
-                registroPago.setFecha(celdaFecha.getStringCellValue());
-                registroPago.setMonto(celdaMonto.getNumericCellValue());
-                registroPago.setNombreCliente(celdaNombreCliente.getStringCellValue());
-                registroPago.setMetodoPago(celdaMetodoPago.getStringCellValue());
+
+                if (celdaFecha == null || celdaMonto == null) {
+                    continue;
+                }
+
+                String fecha = obtenerValorCeldaComoString(celdaFecha);
+                fecha = (fecha == null || fecha.trim().isEmpty()) ? null : fecha.trim();
+
+                double monto = 0;
+                try {
+                    if (celdaMonto.getCellType() == CellType.NUMERIC) {
+                        monto = celdaMonto.getNumericCellValue();
+                    } else {
+                        monto = Double.parseDouble(obtenerValorCeldaComoString(celdaMonto));
+                    }
+                } catch (Exception e) {
+                    System.out.println("Error al leer monto en fila " + (i+1) + ": " + e.getMessage());
+                    continue;
+                }
+
+                String nombreCliente = obtenerValorCeldaComoString(celdaNombreCliente);
+                nombreCliente = (nombreCliente == null || nombreCliente.trim().isEmpty()) ? null : nombreCliente.trim();
+
+                String metodoPago = obtenerValorCeldaComoString(celdaMetodoPago);
+                metodoPago = (metodoPago == null || metodoPago.trim().isEmpty()) ? null : metodoPago.trim();
+
+                RegistroPago registroPago = new RegistroPago(fecha, monto, nombreCliente, metodoPago);
                 lstPagos.add(registroPago);
             }
         }
@@ -1365,16 +1632,39 @@ public class Controlador_Pestanias implements Initializable {
         if (celdaPrimerDato != null) {
             for (int i = 1; i <= hojaXLS.getLastRowNum(); i++) {
                 Row fila = hojaXLS.getRow(i);
+                if (fila == null) continue;
+
                 Cell celdaFecha = fila.getCell(0);
                 Cell celdaCosto = fila.getCell(1);
                 Cell celdaInversor = fila.getCell(2);
                 Cell celdaObservacion = fila.getCell(3);
-                RegistroGastoExtra registroGastoExtra = new RegistroGastoExtra(celdaFecha.getStringCellValue(), celdaCosto.getNumericCellValue(),
-                        celdaInversor.getStringCellValue(), celdaObservacion.getStringCellValue());
-                registroGastoExtra.setFecha(celdaFecha.getStringCellValue());
-                registroGastoExtra.setMonto(celdaCosto.getNumericCellValue());
-                registroGastoExtra.setInversor(celdaInversor.getStringCellValue());
-                registroGastoExtra.setObservacion(celdaObservacion.getStringCellValue());
+
+                if (celdaFecha == null || celdaCosto == null) {
+                    continue;
+                }
+
+                String fecha = obtenerValorCeldaComoString(celdaFecha);
+                fecha = (fecha == null || fecha.trim().isEmpty()) ? null : fecha.trim();
+
+                double costo = 0;
+                try {
+                    if (celdaCosto.getCellType() == CellType.NUMERIC) {
+                        costo = celdaCosto.getNumericCellValue();
+                    } else {
+                        costo = Double.parseDouble(obtenerValorCeldaComoString(celdaCosto));
+                    }
+                } catch (Exception e) {
+                    System.out.println("Error al leer costo en fila " + (i+1) + ": " + e.getMessage());
+                    continue;
+                }
+
+                String inversor = obtenerValorCeldaComoString(celdaInversor);
+                inversor = (inversor == null || inversor.trim().isEmpty()) ? null : inversor.trim();
+
+                String observacion = obtenerValorCeldaComoString(celdaObservacion);
+                observacion = (observacion == null || observacion.trim().isEmpty()) ? null : observacion.trim();
+
+                RegistroGastoExtra registroGastoExtra = new RegistroGastoExtra(fecha, costo, inversor, observacion);
                 lstGastosExtra.add(registroGastoExtra);
             }
         }
@@ -1386,14 +1676,21 @@ public class Controlador_Pestanias implements Initializable {
         if (celdaPrimerDato != null) {
             for (int i = 1; i <= hojaXLS.getLastRowNum(); i++) {
                 Row fila = hojaXLS.getRow(i);
+                if (fila == null) continue;
+
                 Cell celdaNombre = fila.getCell(0);
                 Cell celdaCorreo = fila.getCell(1);
                 Cell celdaInstagram = fila.getCell(2);
-                RegistroCliente registroClientes = new RegistroCliente(celdaNombre.getStringCellValue(), celdaCorreo.getStringCellValue(),
-                        celdaInstagram.getStringCellValue());
-                registroClientes.setNombre(celdaNombre.getStringCellValue());
-                registroClientes.setCorreo(celdaCorreo.getStringCellValue());
-                registroClientes.setInstagram(celdaInstagram.getStringCellValue());
+
+                if (celdaNombre == null) {
+                    continue;
+                }
+
+                String nombre = obtenerValorCeldaComoString(celdaNombre);
+                String correo = obtenerValorCeldaComoString(celdaCorreo);
+                String instagram = obtenerValorCeldaComoString(celdaInstagram);
+
+                RegistroCliente registroClientes = new RegistroCliente(nombre, correo, instagram);
                 lstClientes.add(registroClientes);
             }
         }
@@ -1404,22 +1701,45 @@ public class Controlador_Pestanias implements Initializable {
             try {
 
                 for (int i = 0; i < listaLotes.size(); i++) {
+                    RegistroLote lote = listaLotes.get(i);
+
+                    // Validar que los campos requeridos no sean nulos
+                    Timestamp fechaTimestamp = convertirStringATimestamp(lote.getFecha());
+                    if (fechaTimestamp == null) {
+                        System.err.println("Error: Fecha nula o inválida para el lote " + lote.getId_lote() + ". Saltando este lote.");
+                        continue;
+                    }
+
                     String sql = "CALL public.sp_inserta_lotes(?, ?, ?, ?)";
                     PreparedStatement stmt = conexionABBDD.prepareStatement(sql);
-                    stmt.setTimestamp(1, convertirStringATimestamp(listaLotes.get(i).getFecha()));
-                    stmt.setDouble(2, listaLotes.get(i).getCosto());
-                    stmt.setString(3, String.valueOf(listaLotes.get(i).getLocal()));
-                    stmt.setString(4, String.valueOf(listaLotes.get(i).getInversor()));
+                    stmt.setTimestamp(1, fechaTimestamp);
+                    stmt.setDouble(2, lote.getCosto());
 
-                    System.out.println(convertirStringATimestamp(listaLotes.get(i).getFecha()));
-                    System.out.println(listaLotes.get(i).getCosto());
-                    System.out.println(String.valueOf(listaLotes.get(i).getLocal()));
-                    System.out.println(String.valueOf(listaLotes.get(i).getInversor()));
+                    // Insertar Local como NULL si está vacío
+                    String local = lote.getLocal();
+                    if (local == null || local.trim().isEmpty()) {
+                        stmt.setNull(3, java.sql.Types.VARCHAR);
+                    } else {
+                        stmt.setString(3, local);
+                    }
+
+                    // Insertar Inversor como NULL si está vacío
+                    String inversor = lote.getInversor();
+                    if (inversor == null || inversor.trim().isEmpty()) {
+                        stmt.setNull(4, java.sql.Types.VARCHAR);
+                    } else {
+                        stmt.setString(4, inversor);
+                    }
+
+                    System.out.println("Insertando lote:");
+                    System.out.println("  Fecha: " + fechaTimestamp);
+                    System.out.println("  Costo: " + lote.getCosto());
+                    System.out.println("  Local: " + lote.getLocal());
+                    System.out.println("  Inversor: " + lote.getInversor());
                     System.out.println("-----------------------------");
 
-
                     stmt.execute();
-                    System.out.println("Procedimiento almacenado ejecutado correctamente.");
+                    System.out.println("Lote insertado correctamente.");
 
                     stmt.close();
                 }
@@ -1435,17 +1755,56 @@ public class Controlador_Pestanias implements Initializable {
                 for (int i = 0; i < listaProductos.size(); i++) {
                     String sql = "CALL public.sp_inserta_productos(?, ?, ?, ?, ?, ?, ?, ?, ?)";
                     PreparedStatement stmt = conexionABBDD.prepareStatement(sql);
-                    stmt.setString(1, String.valueOf(listaProductos.get(i).getEstado()));
-                    stmt.setString(2, String.valueOf(listaProductos.get(i).getNombrePrenda()));
-                    stmt.setString(3, String.valueOf(listaProductos.get(i).getCategoria()));
-                    stmt.setString(4, String.valueOf(listaProductos.get(i).getColor()));
-                    stmt.setString(5, String.valueOf(listaProductos.get(i).getTalle()));
-                    stmt.setDouble(6, listaProductos.get(i).getPrecioCompra());
-                    stmt.setDouble(7, listaProductos.get(i).getPrecioVentaEfectivo());
-                    stmt.setDouble(8, listaProductos.get(i).getPrecioVentaTransf());
+
+                    RegistroProducto producto = listaProductos.get(i);
+
+                    // Insertar campos String como NULL si están vacíos
+                    if (producto.getEstado() == null || producto.getEstado().trim().isEmpty()) {
+                        stmt.setNull(1, java.sql.Types.VARCHAR);
+                    } else {
+                        stmt.setString(1, producto.getEstado());
+                    }
+
+                    if (producto.getNombrePrenda() == null || producto.getNombrePrenda().trim().isEmpty()) {
+                        stmt.setNull(2, java.sql.Types.VARCHAR);
+                    } else {
+                        stmt.setString(2, producto.getNombrePrenda());
+                    }
+
+                    if (producto.getCategoria() == null || producto.getCategoria().trim().isEmpty()) {
+                        stmt.setNull(3, java.sql.Types.VARCHAR);
+                    } else {
+                        stmt.setString(3, producto.getCategoria());
+                    }
+
+                    if (producto.getColor() == null || producto.getColor().trim().isEmpty()) {
+                        stmt.setNull(4, java.sql.Types.VARCHAR);
+                    } else {
+                        stmt.setString(4, producto.getColor());
+                    }
+
+                    if (producto.getTalle() == null || producto.getTalle().trim().isEmpty()) {
+                        stmt.setNull(5, java.sql.Types.VARCHAR);
+                    } else {
+                        stmt.setString(5, producto.getTalle());
+                    }
+
+                    // Los precios son campos NOT NULL en la base de datos, por lo tanto siempre deben tener un valor
+                    // Si son 0, significa que no se proporcionaron correctamente y debemos saltar este registro
+                    if (producto.getPrecioCompra() == 0.0 || producto.getPrecioVentaEfectivo() == 0.0 || producto.getPrecioVentaTransf() == 0.0) {
+                        System.err.println("Error: Producto con precios inválidos (0 o null) en fila. Saltando este registro.");
+                        System.err.println("  Prenda: " + producto.getNombrePrenda());
+                        System.err.println("  Precios: Compra=" + producto.getPrecioCompra() + " | Efectivo=" + producto.getPrecioVentaEfectivo() + " | Transf=" + producto.getPrecioVentaTransf());
+                        stmt.close();
+                        continue;
+                    }
+
+                    stmt.setDouble(6, producto.getPrecioCompra());
+                    stmt.setDouble(7, producto.getPrecioVentaEfectivo());
+                    stmt.setDouble(8, producto.getPrecioVentaTransf());
 
                     // Si id_lote es 0, enviar NULL a la base de datos
-                    int idLote = listaProductos.get(i).getId_lote();
+                    int idLote = producto.getId_lote();
                     if (idLote == 0) {
                         stmt.setNull(9, java.sql.Types.INTEGER);
                     } else {
@@ -1479,11 +1838,27 @@ public class Controlador_Pestanias implements Initializable {
             try {
 
                 for (int i = 0; i < listaPagos.size(); i++) {
+                    RegistroPago pago = listaPagos.get(i);
+
                     String sql = "CALL public.sp_inserta_pagos(?, ?, ?)";
                     PreparedStatement stmt = conexionABBDD.prepareStatement(sql);
-                    stmt.setDouble(1, listaPagos.get(i).getMonto());
-                    stmt.setString(2, String.valueOf(listaPagos.get(i).getNombreCliente()));
-                    stmt.setString(3, String.valueOf(listaPagos.get(i).getMetodoPago()));
+                    stmt.setDouble(1, pago.getMonto());
+
+                    // Insertar NombreCliente como NULL si está vacío
+                    String nombreCliente = pago.getNombreCliente();
+                    if (nombreCliente == null || nombreCliente.trim().isEmpty()) {
+                        stmt.setNull(2, java.sql.Types.VARCHAR);
+                    } else {
+                        stmt.setString(2, nombreCliente);
+                    }
+
+                    // Insertar MetodoPago como NULL si está vacío
+                    String metodoPago = pago.getMetodoPago();
+                    if (metodoPago == null || metodoPago.trim().isEmpty()) {
+                        stmt.setNull(3, java.sql.Types.VARCHAR);
+                    } else {
+                        stmt.setString(3, metodoPago);
+                    }
 
                     System.out.println(listaPagos.get(i).getMonto());
                     System.out.println(String.valueOf(listaPagos.get(i).getNombreCliente()));
@@ -1507,21 +1882,45 @@ public class Controlador_Pestanias implements Initializable {
             try {
 
                 for (int i = 0; i < listaGastoExtra.size(); i++) {
+                    RegistroGastoExtra gasto = listaGastoExtra.get(i);
+
+                    // Validar que los campos requeridos no sean nulos
+                    Timestamp fechaTimestamp = convertirStringATimestamp(gasto.getFecha());
+                    if (fechaTimestamp == null) {
+                        System.err.println("Error: Fecha nula o inválida para el gasto extra. Saltando este registro.");
+                        continue;
+                    }
+
                     String sql = "CALL public.sp_inserta_gasto_extra(?, ?, ?, ?)";
                     PreparedStatement stmt = conexionABBDD.prepareStatement(sql);
-                    stmt.setTimestamp(1, convertirStringATimestamp(listaGastoExtra.get(i).getFecha()));
-                    stmt.setDouble(2, listaGastoExtra.get(i).getMonto());
-                    stmt.setString(3, String.valueOf(listaGastoExtra.get(i).getInversor()));
-                    stmt.setString(4, String.valueOf(listaGastoExtra.get(i).getObservacion()));
+                    stmt.setTimestamp(1, fechaTimestamp);
+                    stmt.setDouble(2, gasto.getMonto());
 
-                    System.out.println(convertirStringATimestamp(listaGastoExtra.get(i).getFecha()));
-                    System.out.println(listaGastoExtra.get(i).getMonto());
-                    System.out.println(String.valueOf(listaGastoExtra.get(i).getInversor()));
-                    System.out.println(String.valueOf(listaGastoExtra.get(i).getObservacion()));
+                    // Insertar Inversor como NULL si está vacío
+                    String inversor = gasto.getInversor();
+                    if (inversor == null || inversor.trim().isEmpty()) {
+                        stmt.setNull(3, java.sql.Types.VARCHAR);
+                    } else {
+                        stmt.setString(3, inversor);
+                    }
+
+                    // Insertar Observación como NULL si está vacío
+                    String observacion = gasto.getObservacion();
+                    if (observacion == null || observacion.trim().isEmpty()) {
+                        stmt.setNull(4, java.sql.Types.VARCHAR);
+                    } else {
+                        stmt.setString(4, observacion);
+                    }
+
+                    System.out.println("Insertando gasto extra:");
+                    System.out.println("  Fecha: " + fechaTimestamp);
+                    System.out.println("  Monto: " + gasto.getMonto());
+                    System.out.println("  Inversor: " + gasto.getInversor());
+                    System.out.println("  Observación: " + gasto.getObservacion());
                     System.out.println("-----------------------------");
 
                     stmt.execute();
-                    System.out.println("Procedimiento almacenado "+ sql + " ejecutado correctamente.");
+                    System.out.println("Gasto extra insertado correctamente.");
 
                     stmt.close();
                 }
@@ -1536,11 +1935,34 @@ public class Controlador_Pestanias implements Initializable {
             try {
 
                 for (int i = 0; i < listaClientes.size(); i++) {
+                    RegistroCliente cliente = listaClientes.get(i);
+
                     String sql = "CALL public.sp_inserta_clientes(?, ?, ?)";
                     PreparedStatement stmt = conexionABBDD.prepareStatement(sql);
-                    stmt.setString(1, listaClientes.get(i).getNombre());
-                    stmt.setString(2, listaClientes.get(i).getCorreo());
-                    stmt.setString(3, listaClientes.get(i).getInstagram());
+
+                    // Insertar Nombre como NULL si está vacío
+                    String nombre = cliente.getNombre();
+                    if (nombre == null || nombre.trim().isEmpty()) {
+                        stmt.setNull(1, java.sql.Types.VARCHAR);
+                    } else {
+                        stmt.setString(1, nombre);
+                    }
+
+                    // Insertar Correo como NULL si está vacío
+                    String correo = cliente.getCorreo();
+                    if (correo == null || correo.trim().isEmpty()) {
+                        stmt.setNull(2, java.sql.Types.VARCHAR);
+                    } else {
+                        stmt.setString(2, correo);
+                    }
+
+                    // Insertar Instagram como NULL si está vacío
+                    String instagram = cliente.getInstagram();
+                    if (instagram == null || instagram.trim().isEmpty()) {
+                        stmt.setNull(3, java.sql.Types.VARCHAR);
+                    } else {
+                        stmt.setString(3, instagram);
+                    }
 
                     System.out.println(listaClientes.get(i).getNombre());
                     System.out.println(listaClientes.get(i).getCorreo());
@@ -1560,16 +1982,36 @@ public class Controlador_Pestanias implements Initializable {
     }
 
     public static Timestamp convertirStringATimestamp(String fechaString) {
+        // Validar que el String no sea nulo o vacío
+        if (fechaString == null || fechaString.trim().isEmpty()) {
+            System.err.println("Error: La fecha es nula o vacía");
+            return null;
+        }
+
         try {
-            // Define el formato de fecha esperado
-            SimpleDateFormat formatoFecha = new SimpleDateFormat("dd-MM-yyyy");
+            // Intentar con diferentes formatos de fecha
+            SimpleDateFormat formatoFecha;
+
+            // Si contiene barras (/), usar ese formato
+            if (fechaString.contains("/")) {
+                formatoFecha = new SimpleDateFormat("dd/MM/yyyy");
+            }
+            // Si contiene guiones (-), usar ese formato
+            else if (fechaString.contains("-")) {
+                formatoFecha = new SimpleDateFormat("dd-MM-yyyy");
+            }
+            // Por defecto, intentar con barras
+            else {
+                formatoFecha = new SimpleDateFormat("dd/MM/yyyy");
+            }
+
             // Convierte el String a un objeto java.util.Date
             java.util.Date fechaUtil = formatoFecha.parse(fechaString);
             // Convierte el objeto java.util.Date a java.sql.Timestamp
             return new Timestamp(fechaUtil.getTime());
         } catch (ParseException e) {
             // Manejo de errores si la fecha no tiene el formato esperado
-            System.err.println("Error al parsear la fecha: " + e.getMessage());
+            System.err.println("Error al parsear la fecha '" + fechaString + "': " + e.getMessage());
             return null;
         }
     }
@@ -2356,66 +2798,36 @@ public class Controlador_Pestanias implements Initializable {
         btnConsultarCF.setDisable(true);
     }
 
+    private Connection conectarABBDD() throws SQLException {
+        try {
+            // Carga explícita del controlador
+            Class.forName("org.postgresql.Driver");
+            String url = "jdbc:postgresql://dpg-d5ilih1r0fns73bbo6pg-a.oregon-postgres.render.com/bd_capristore";
+            String user = "bd_capristore_user";
+            String password = "nu9ug0U9OV4sgDXfmegardo8lcdhdvyn";
+            return DriverManager.getConnection(url, user, password);
+        } catch (ClassNotFoundException e) {
+            throw new SQLException("No se encontró el controlador PostgreSQL", e);
+        }
+    }
+
     public void conectarABBDDConReintentos() {
-        /*String url = "jdbc:postgresql://dpg-d1r8g98dl3ps73f6mu7g-a.oregon-postgres.render.com:5432/capristore";
-        String user = "capristore_user";
-        String password = "8nJfvy63HeV0hhUB1DtEJ44ANgBf8SEy";*/
-
-        String url = "jdbc:postgresql://ep-long-moon-adlto9zd-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channelBinding=require";
-        String user = "neondb_owner";
-        String password = "npg_xMv5KQs3lVNo";
-
-        final int MAX_RETRIES = 3;
-        final int RETRY_DELAY_MS = 2000;
-
-        conexionABBDD = null;
         int intentos = 0;
-
-        while (intentos < MAX_RETRIES) {
+        while (intentos < 3) {
             try {
-                System.out.println("🔄 Intentando conectar a la base de datos...");
-                conexionABBDD = DriverManager.getConnection(url, user, password);
-                System.out.println("✅ Conexión exitosa a Neon PostgreSQL.");
-                modoOffline = false;
+                this.conexionABBDD = conectarABBDD();
+                System.out.println("Conexión exitosa a la base de datos.");
                 return;
             } catch (SQLException e) {
                 intentos++;
-                System.err.println("❌ Error al conectar con PostgreSQL. Intento " + intentos + " de " + MAX_RETRIES);
-                System.err.println("Mensaje de error: " + e.getMessage());
+                System.err.println("Error al conectar con PostgreSQL. Intento " + intentos + " de 3");
                 e.printStackTrace();
-
-                if (intentos >= MAX_RETRIES) {
-                    System.err.println("⚠️ No se pudo conectar después de " + MAX_RETRIES + " intentos.");
-                    System.err.println("🔶 Iniciando en MODO OFFLINE - Funcionalidades limitadas");
-                    modoOffline = true;
-
-                    Platform.runLater(() -> {
-                        mostrarAlerta("Modo Offline",
-                            "No se pudo conectar a la base de datos.\n\n" +
-                            "La aplicación continuará en MODO OFFLINE con funcionalidades limitadas.\n" +
-                            "Algunas funciones que requieren base de datos no estarán disponibles.",
-                            Alert.AlertType.WARNING);
-                    });
-                    break;
-                }
-
-                try {
-                    Thread.sleep(RETRY_DELAY_MS);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    System.err.println("❌ Error al esperar entre reintentos.");
-                    break;
-                }
             }
         }
+        System.err.println("No se pudo conectar después de 3 intentos.");
+        this.conexionABBDD = null;
     }
-    /* String url = "jdbc:postgresql://localhost:5432/bd_CapriRopa";
-    String user = "postgres";
-    String password = "GloMinte@89";*/
 
-/*    String url = "jdbc:postgresql://autorack.proxy.rlwy.net:17870/railway";
-    String user = "postgres"; // O el usuario que aparece en Railway
-    String password = "CYAFNVxEfUHpElpvEDPdVkMVecpWTNKq"; // Copia la contraseña de Railway*/
     public void desconexionABBDD(){
         if(conexionABBDD!=null){
             try{

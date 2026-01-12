@@ -591,6 +591,9 @@
                                          <String fx:value="Vestidos" />
                                          <String fx:value="Accesorios" />
                                          <String fx:value="Remeras" />
+                                         <String fx:value="Bodys" />
+                                         <String fx:value="Conjuntos" />
+                                         <String fx:value="Shorts" />
                                       </FXCollections>
                                    </items>
                                 </ComboBox>
@@ -616,6 +619,10 @@
                                    <Button fx:id="btnSeleccionarImagen" text="Seleccionar Imagen" onAction="#seleccionarImagen" />
                                    <Label fx:id="lblImagenSeleccionada" />
                                 </HBox>
+                                <VBox fx:id="dropZoneImagen" alignment="CENTER" prefHeight="80.0" prefWidth="200.0"
+                                      style="-fx-border-color: #cccccc; -fx-border-style: dashed; -fx-border-width: 2; -fx-background-color: #f9f9f9;">
+                                   <Label text="O arrastra la imagen aquí" style="-fx-text-fill: #888888;" />
+                                </VBox>
                              </VBox>
 
                              <Label text="Detalle:" GridPane.columnIndex="2" GridPane.rowIndex="2"
