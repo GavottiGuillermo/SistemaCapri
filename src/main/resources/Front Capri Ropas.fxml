@@ -18,6 +18,7 @@
 <?import javafx.scene.layout.GridPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.RowConstraints?>
+<?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.text.Font?>
 <?import javafx.scene.text.TextFlow?>
@@ -47,7 +48,9 @@
             </TextFlow>
          </children>
       </AnchorPane>
-      <TabPane tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS" xmlns:fx="http://javafx.com/fxml">
+      <StackPane VBox.vgrow="ALWAYS">
+         <children>
+            <TabPane tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS" xmlns:fx="http://javafx.com/fxml">
         <tabs>
           <Tab text="Ventas">
             <content>
@@ -543,6 +546,7 @@
                                 <Label text="Buscar:" />
                                 <TextField fx:id="fldBuscarArticuloWeb" promptText="Buscar por ID o nombre"
                                            maxWidth="250" />
+                                <Button fx:id="btnRefrescarWeb" text="Refrescar" />
                              </HBox>
 
                              <TableView fx:id="tblProductosWeb" VBox.vgrow="ALWAYS" prefHeight="450">
@@ -590,6 +594,8 @@
                                          <String fx:value="Minis" />
                                          <String fx:value="Vestidos" />
                                          <String fx:value="Accesorios" />
+                                         <String fx:value="Carteras" />
+                                         <String fx:value="OnaFitness" />
                                          <String fx:value="Remeras" />
                                          <String fx:value="Bodys" />
                                          <String fx:value="Conjuntos" />
@@ -605,6 +611,7 @@
                              <ComboBox fx:id="cmbTalleWeb" GridPane.columnIndex="3" GridPane.rowIndex="0">
                                 <items>
                                    <FXCollections fx:factory="observableArrayList">
+                                      <String fx:value="" />
                                       <String fx:value="S" />
                                       <String fx:value="M" />
                                       <String fx:value="L" />
@@ -643,5 +650,10 @@
            </Tab>
         </tabs>
       </TabPane>
+            <Label fx:id="lblLoading" text="⏳ Cargando..." visible="false" managed="false"
+                   alignment="CENTER"
+                   style="-fx-background-color: rgba(0,0,0,0.55); -fx-text-fill: white; -fx-font-size: 24px; -fx-font-weight: bold; -fx-padding: 20;" />
+         </children>
+      </StackPane>
    </children>
 </VBox>

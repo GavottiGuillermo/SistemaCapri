@@ -53,6 +53,7 @@ import org.postgresql.util.PGobject;
 import org.sistema.ModuloCargaArchivo.*;
 import org.sistema.ModuloCashFlow.RegistroTransaccionCF;
 import org.sistema.ModuloVentas.RegistroArticuloVentas;
+import org.sistema.config.DatabaseConfig;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -188,12 +189,14 @@ public class Controlador_Pestanias implements Initializable {
     @FXML private TextField fldBuscarArticuloWeb;
     @FXML private Button btnGenerarSubirArticulo;
     @FXML private Button btnSeleccionarImagen;
+    @FXML private Button btnRefrescarWeb;
     @FXML private Label lblImagenSeleccionada;
     @FXML private ComboBox cmbTalleWeb;
     @FXML private CheckBox chkNovedad;
     @FXML private VBox dropZoneImagen;
     private File imagenSeleccionada;
 
+    private final ObservableList<RegistroArticuloVentas> listaProductosWeb = FXCollections.observableArrayList();
     private FilteredList<RegistroArticuloVentas> productosFiltrados;
     @Override public void initialize(URL location, ResourceBundle resources) {
 
@@ -204,9 +207,10 @@ public class Controlador_Pestanias implements Initializable {
             configurarFiltroTablaWeb();
             configurarDragAndDropImagen();
             obtenerProductosDesdeBD();
+            btnRefrescarWeb.setOnAction(event -> refrescarTablaWeb());
             GoogleCloudConfig.configureGoogleCredentials();
             ////////////PESTAÑA VENTAS ////////////////////////
-            btnRefrescarStock.setOnAction(event -> obtenerProductosDesdeBD());
+            btnRefrescarStock.setOnAction(event -> refrescarTablaStock());
             btnFinalizarCompra.setDisable(true);
             btnCancelarCompra.setDisable(true);
             cargarDatosDesdeBBDD();
@@ -278,7 +282,7 @@ public class Controlador_Pestanias implements Initializable {
     }
 
     private void obtenerProductosDesdeBD() {
-        ObservableList<RegistroArticuloVentas> productosWeb = FXCollections.observableArrayList();
+        listaProductosWeb.clear();
 
         try {
             conectarABBDDConReintentos();
@@ -299,17 +303,13 @@ public class Controlador_Pestanias implements Initializable {
                         rs.getString("talle"),
                         rs.getDouble("precio_venta_efectivo"),
                         rs.getDouble("precio_venta_transferencia"),
-                        rs.getString("publicado_en_web") // Add this field
+                        rs.getString("publicado_en_web")
                 );
-                productosWeb.add(producto);
+                listaProductosWeb.add(producto);
             }
 
-            tblProductosWeb.setItems(productosWeb);
-            productosFiltrados = new FilteredList<>(productosWeb, p -> true);
+            productosFiltrados = new FilteredList<>(listaProductosWeb, p -> true);
             tblProductosWeb.setItems(productosFiltrados);
-            tblArticulosStock.setItems(listaFiltrada);
-            btnRefrescarStock.setOnAction(event -> refrescarTablaStock());
-
 
         } catch (SQLException e) {
             mostrarAlerta("Error", "Error al cargar productos desde la base de datos", Alert.AlertType.ERROR);
@@ -377,13 +377,9 @@ public class Controlador_Pestanias implements Initializable {
         }
     }
     private void configurarFiltroTablaWeb() {
-        // Inicializar la lista filtrada basada en la lista original
-        productosFiltrados = new FilteredList<>(tblProductosWeb.getItems(), p -> true);
-
-        // Vincular la lista filtrada a la tabla
+        productosFiltrados = new FilteredList<>(listaProductosWeb, p -> true);
         tblProductosWeb.setItems(productosFiltrados);
 
-        // Agregar un listener al campo de texto para aplicar el filtro
         fldBuscarArticuloWeb.textProperty().addListener((observable, oldValue, newValue) -> {
             filtrarProductosWeb(newValue);
         });
@@ -391,13 +387,12 @@ public class Controlador_Pestanias implements Initializable {
 
     private void filtrarProductosWeb(String filtro) {
         if (filtro == null || filtro.isEmpty()) {
-            productosFiltrados.setPredicate(p -> true); // Mostrar todos los elementos
+            productosFiltrados.setPredicate(p -> true);
         } else {
-            productosFiltrados.setPredicate(producto -> {
-                // Filtrar por nombre o ID del artículo
-                return producto.getNombreArticulo().toLowerCase().contains(filtro.toLowerCase()) ||
-                        String.valueOf(producto.getIdArticulo()).contains(filtro);
-            });
+            productosFiltrados.setPredicate(producto ->
+                    producto.getNombreArticulo().toLowerCase().contains(filtro.toLowerCase()) ||
+                            String.valueOf(producto.getIdArticulo()).contains(filtro)
+            );
         }
     }
 
@@ -862,15 +857,51 @@ public class Controlador_Pestanias implements Initializable {
         Stage ventana = new Stage();
         ventana.setTitle("Detalle del Pedido");
 
-        VBox layout = new VBox(10);
+        VBox layout = new VBox(12);
         layout.setPadding(new Insets(15));
 
         Label lblDetalle = new Label("Detalle del Pedido:");
+        lblDetalle.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
         layout.getChildren().add(lblDetalle);
 
-        for (String detalle : pedido) {
-            layout.getChildren().add(new Label(detalle));
+        GridPane gridResumen = new GridPane();
+        gridResumen.setHgap(10);
+        gridResumen.setVgap(5);
+        String[] etiquetas = {"ID Pedido:", "Fecha:", "Estado:", "Monto:", "Cliente:"};
+        for (int i = 0; i < etiquetas.length && i < pedido.size(); i++) {
+            Label lblCampo = new Label(etiquetas[i]);
+            lblCampo.setStyle("-fx-font-weight: bold;");
+            gridResumen.add(lblCampo, 0, i);
+            gridResumen.add(new Label(pedido.get(i)), 1, i);
         }
+        layout.getChildren().add(gridResumen);
+
+        Label lblArticulos = new Label("Artículos asociados:");
+        lblArticulos.setStyle("-fx-font-weight: bold;");
+        layout.getChildren().add(lblArticulos);
+
+        TableView<ObservableList<String>> tablaArticulos = new TableView<>();
+        tablaArticulos.setPrefHeight(250);
+        tablaArticulos.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        tablaArticulos.setPlaceholder(new Label("No hay artículos asociados a este pedido."));
+
+        String[] columnas = {"ID Artículo", "Prenda", "Categoría", "Color", "Talle", "Precio"};
+        for (int i = 0; i < columnas.length; i++) {
+            final int index = i;
+            TableColumn<ObservableList<String>, String> col = new TableColumn<>(columnas[i]);
+            col.setCellValueFactory(data -> {
+                ObservableList<String> fila = data.getValue();
+                return new SimpleStringProperty(index < fila.size() ? fila.get(index) : "");
+            });
+            tablaArticulos.getColumns().add(col);
+        }
+
+        ObservableList<ObservableList<String>> articulosPedido = obtenerArticulosDelPedido(pedido.get(0));
+        if (articulosPedido.isEmpty()) {
+            tablaArticulos.setPlaceholder(new Label("No se encontraron artículos para este pedido."));
+        }
+        tablaArticulos.setItems(articulosPedido);
+        layout.getChildren().add(tablaArticulos);
 
         Button btnMarcarEntregado = new Button("Marcar como Entregado");
         btnMarcarEntregado.setOnAction(event -> {
@@ -879,7 +910,7 @@ public class Controlador_Pestanias implements Initializable {
                 if (conexionABBDD != null) {
                     String sql = "CALL sp_actualizar_pedido_entregado(?)";
                     PreparedStatement stmt = conexionABBDD.prepareStatement(sql);
-                    stmt.setString(1, pedido.get(0)); // Pass the ID of the pedido
+                    stmt.setString(1, pedido.get(0));
                     stmt.execute();
                     desconexionABBDD();
                     refrescarTablaPedidos();
@@ -898,8 +929,39 @@ public class Controlador_Pestanias implements Initializable {
         ventana.showAndWait();
     }
 
+    private ObservableList<ObservableList<String>> obtenerArticulosDelPedido(String codigoPedido) {
+        ObservableList<ObservableList<String>> articulos = FXCollections.observableArrayList();
+        conectarABBDDConReintentos();
+        if (conexionABBDD == null) {
+            return articulos;
+        }
 
-    ////////////PESTAÑA CONSULTAR/MODIFICAR LISTAS ////////////////////////
+        String sql = "SELECT id_articulo, prenda, categoria, color, talle, precio_venta_transferencia " +
+                "FROM productos WHERE id_pedido = ? ORDER BY id_articulo ASC";
+        try (PreparedStatement stmt = conexionABBDD.prepareStatement(sql)) {
+            stmt.setString(1, codigoPedido != null ? codigoPedido.trim() : null);
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    ObservableList<String> fila = FXCollections.observableArrayList(
+                            rs.getString("id_articulo"),
+                            rs.getString("prenda"),
+                            rs.getString("categoria"),
+                            rs.getString("color"),
+                            rs.getString("talle"),
+                            rs.getString("precio_venta_transferencia")
+                    );
+                    articulos.add(fila);
+                }
+            }
+        } catch (SQLException e) {
+            mostrarAlerta("Error", "No se pudieron obtener los artículos del pedido: " + e.getMessage(), Alert.AlertType.ERROR);
+            e.printStackTrace();
+        } finally {
+            desconexionABBDD();
+        }
+        return articulos;
+    }
+
     private void cargarLista(String nombreLista) throws SQLException {
         listaActual = nombreLista; // Guardamos la lista actual
         conectarABBDDConReintentos();
@@ -1303,8 +1365,6 @@ public class Controlador_Pestanias implements Initializable {
             } else {
                 System.out.println("Hoja 'Clientes' no encontrada, saltando...");
             }
-            mostrarAlerta("Carga Masiva", "Archivo cargado correctamente a Base de Datos", Alert.AlertType.INFORMATION);
-            resetearCargaArchivo();
         } catch (FileNotFoundException e) {
             throw new RuntimeException(e);
         } catch (IOException e) {
@@ -2444,19 +2504,21 @@ public class Controlador_Pestanias implements Initializable {
     }
 
     @FXML
+    private void refrescarTablaWeb() {
+        obtenerProductosDesdeBD();
+        filtrarProductosWeb(fldBuscarArticuloWeb.getText());
+        tblProductosWeb.refresh();
+    }
+    @FXML
     private void refrescarTablaStock() {
         fldBuscarNumArticulo.clear();
         fldBuscarNomPrenda.clear();
         fldBuscarEstado.clear();
         fldBuscarCategoria.clear();
 
-        // Create a new modifiable list and set it to the table
-        ObservableList<RegistroArticuloVentas> nuevaLista = FXCollections.observableArrayList();
-        tblArticulosStock.setItems(nuevaLista);
-
-        // Fetch updated data and populate the table
-        obtenerProductosDesdeBD();
-        configurarTablaStock();
+        cargarDatosDesdeBBDD();
+        listaFiltrada = new FilteredList<>(listaStock, p -> true);
+        tblArticulosStock.setItems(listaFiltrada);
         tblArticulosStock.refresh();
     }
     @FXML
@@ -2799,19 +2861,11 @@ public class Controlador_Pestanias implements Initializable {
     }
 
     private Connection conectarABBDD() throws SQLException {
-        try {
-            // Carga explícita del controlador
-            Class.forName("org.postgresql.Driver");
-            String url = "jdbc:postgresql://dpg-d5ilih1r0fns73bbo6pg-a.oregon-postgres.render.com/bd_capristore";
-            String user = "bd_capristore_user";
-            String password = "nu9ug0U9OV4sgDXfmegardo8lcdhdvyn";
-            return DriverManager.getConnection(url, user, password);
-        } catch (ClassNotFoundException e) {
-            throw new SQLException("No se encontró el controlador PostgreSQL", e);
-        }
+        return DatabaseConfig.createConnection();
     }
 
     public void conectarABBDDConReintentos() {
+
         int intentos = 0;
         while (intentos < 3) {
             try {
