@@ -542,11 +542,15 @@
 
                           <!-- Search and Table Section -->
                           <VBox spacing="10" VBox.vgrow="ALWAYS">
-                             <HBox spacing="15" alignment="CENTER_LEFT">
+                             <HBox spacing="10" alignment="CENTER_LEFT">
                                 <Label text="Buscar:" />
                                 <TextField fx:id="fldBuscarArticuloWeb" promptText="Buscar por ID o nombre"
-                                           maxWidth="250" />
-                                <Button fx:id="btnRefrescarWeb" text="Refrescar" />
+                                           maxWidth="200" />
+                                <Label text="Publicado:" />
+                                <ComboBox fx:id="cmbFiltroPublicadoWeb" prefWidth="130" />
+                                <Button fx:id="btnRefrescarWeb" text="⟳ Refrescar" />
+                                <Button fx:id="btnAjustarPreciosWeb" text="💰 Ajustar Precios %"
+                                        style="-fx-background-color: #FF9800; -fx-text-fill: white; -fx-font-weight: bold;" />
                              </HBox>
 
                              <TableView fx:id="tblProductosWeb" VBox.vgrow="ALWAYS" prefHeight="450">

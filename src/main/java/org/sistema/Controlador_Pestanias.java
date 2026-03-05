@@ -190,6 +190,8 @@ public class Controlador_Pestanias implements Initializable {
     @FXML private Button btnGenerarSubirArticulo;
     @FXML private Button btnSeleccionarImagen;
     @FXML private Button btnRefrescarWeb;
+    @FXML private Button btnAjustarPreciosWeb;
+    @FXML private ComboBox<String> cmbFiltroPublicadoWeb;
     @FXML private Label lblImagenSeleccionada;
     @FXML private ComboBox cmbTalleWeb;
     @FXML private CheckBox chkNovedad;
@@ -198,6 +200,8 @@ public class Controlador_Pestanias implements Initializable {
 
     private final ObservableList<RegistroArticuloVentas> listaProductosWeb = FXCollections.observableArrayList();
     private FilteredList<RegistroArticuloVentas> productosFiltrados;
+    private String filtroTextoWeb = "";
+    private String filtroPublicadoWeb = "Todos";
     @Override public void initialize(URL location, ResourceBundle resources) {
 
         try{
@@ -208,6 +212,17 @@ public class Controlador_Pestanias implements Initializable {
             configurarDragAndDropImagen();
             obtenerProductosDesdeBD();
             btnRefrescarWeb.setOnAction(event -> refrescarTablaWeb());
+            if (btnAjustarPreciosWeb != null) {
+                btnAjustarPreciosWeb.setOnAction(event -> mostrarVentanaAjustePorcentualPrecios());
+            }
+            if (cmbFiltroPublicadoWeb != null) {
+                cmbFiltroPublicadoWeb.getItems().setAll("Todos", "Publicados", "No publicados");
+                cmbFiltroPublicadoWeb.setValue("Todos");
+                cmbFiltroPublicadoWeb.setOnAction(event -> {
+                    filtroPublicadoWeb = (String) cmbFiltroPublicadoWeb.getValue();
+                    aplicarFiltrosWeb();
+                });
+            }
             GoogleCloudConfig.configureGoogleCredentials();
             ////////////PESTAÑA VENTAS ////////////////////////
             btnRefrescarStock.setOnAction(event -> refrescarTablaStock());
@@ -327,14 +342,23 @@ public class Controlador_Pestanias implements Initializable {
         // Configurar columna de acciones
         colAccionesWeb.setCellFactory(column -> new TableCell<RegistroArticuloVentas, Void>() {
             private final Button btnQuitar = new Button("Quitar de la Web");
+            private final Button btnModificar = new Button("✏ Modificar");
+            private final HBox botonesPublicado = new HBox(5, btnModificar, btnQuitar);
 
             {
                 btnQuitar.setOnAction(event -> {
                     RegistroArticuloVentas producto = getTableView().getItems().get(getIndex());
                     if (producto != null) {
-                        quitarDeLaWeb(producto); // Call the method
+                        quitarDeLaWeb(producto);
                     }
                 });
+                btnModificar.setOnAction(event -> {
+                    RegistroArticuloVentas producto = getTableView().getItems().get(getIndex());
+                    if (producto != null) {
+                        mostrarVentanaModificarArticuloWeb(producto);
+                    }
+                });
+                btnModificar.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white;");
             }
 
             @Override
@@ -345,9 +369,9 @@ public class Controlador_Pestanias implements Initializable {
                 } else {
                     RegistroArticuloVentas producto = getTableView().getItems().get(getIndex());
                     if (producto != null && "true".equalsIgnoreCase(producto.getPublicadoEnWeb())) {
-                        setGraphic(btnQuitar); // Show the button if the product is published
+                        setGraphic(botonesPublicado);
                     } else {
-                        setGraphic(null); // Hide the button otherwise
+                        setGraphic(null);
                     }
                 }
             }
@@ -381,19 +405,33 @@ public class Controlador_Pestanias implements Initializable {
         tblProductosWeb.setItems(productosFiltrados);
 
         fldBuscarArticuloWeb.textProperty().addListener((observable, oldValue, newValue) -> {
-            filtrarProductosWeb(newValue);
+            filtroTextoWeb = newValue == null ? "" : newValue;
+            aplicarFiltrosWeb();
+        });
+    }
+
+    private void aplicarFiltrosWeb() {
+        productosFiltrados.setPredicate(producto -> {
+            // Filtro por texto
+            boolean coincideTexto = filtroTextoWeb == null || filtroTextoWeb.isEmpty()
+                    || producto.getNombreArticulo().toLowerCase().contains(filtroTextoWeb.toLowerCase())
+                    || String.valueOf(producto.getIdArticulo()).contains(filtroTextoWeb);
+
+            // Filtro por publicado
+            boolean coincidePublicado = true;
+            if ("Publicados".equals(filtroPublicadoWeb)) {
+                coincidePublicado = "true".equalsIgnoreCase(producto.getPublicadoEnWeb());
+            } else if ("No publicados".equals(filtroPublicadoWeb)) {
+                coincidePublicado = !"true".equalsIgnoreCase(producto.getPublicadoEnWeb());
+            }
+
+            return coincideTexto && coincidePublicado;
         });
     }
 
     private void filtrarProductosWeb(String filtro) {
-        if (filtro == null || filtro.isEmpty()) {
-            productosFiltrados.setPredicate(p -> true);
-        } else {
-            productosFiltrados.setPredicate(producto ->
-                    producto.getNombreArticulo().toLowerCase().contains(filtro.toLowerCase()) ||
-                            String.valueOf(producto.getIdArticulo()).contains(filtro)
-            );
-        }
+        filtroTextoWeb = filtro;
+        aplicarFiltrosWeb();
     }
 
     private void configurarDragAndDropImagen() {
@@ -648,6 +686,527 @@ public class Controlador_Pestanias implements Initializable {
         } catch (Exception e) {
             mostrarAlerta("Error", "No se pudo eliminar el producto de la web: " + e.getMessage(), Alert.AlertType.ERROR);
             e.printStackTrace();
+        }
+    }
+
+    private void mostrarVentanaModificarArticuloWeb(RegistroArticuloVentas producto) {
+        // Leer datos actuales desde Cloud Storage
+        String[] datosActuales = leerDatosTxtDesdeCloud(producto);
+        if (datosActuales == null) {
+            mostrarAlerta("Error", "No se pudieron leer los datos actuales del artículo desde la web.", Alert.AlertType.ERROR);
+            return;
+        }
+        // datosActuales: [0]=titulo, [1]=texto, [2]=precio, [3]=talle, [4]=detalle, [5]=categoria, [6]=carpeta, [7]=urlImagenActual
+        String tituloActual  = datosActuales[0];
+        String textoActual   = datosActuales[1];
+        String precioActual  = datosActuales[2];
+        String talleActual   = datosActuales[3];
+        String detalleActual = datosActuales[4];
+        String categoriaActual = datosActuales[5];
+        String carpetaActual = datosActuales[6];
+        String urlImagenActual = datosActuales[7];
+
+        Stage ventana = new Stage();
+        ventana.setTitle("Modificar Artículo Web: " + producto.getNombreArticulo());
+
+        GridPane grid = new GridPane();
+        grid.setHgap(12);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20));
+
+        int row = 0;
+
+        // Título
+        grid.add(new Label("Título:"), 0, row);
+        TextField fldTitulo = new TextField(tituloActual.equals("null") ? "" : tituloActual);
+        fldTitulo.setPrefWidth(300);
+        grid.add(fldTitulo, 1, row++);
+
+        // Texto corto
+        grid.add(new Label("Texto corto:"), 0, row);
+        TextField fldTexto = new TextField(textoActual.equals("null") ? "" : textoActual);
+        grid.add(fldTexto, 1, row++);
+
+        // Precio
+        grid.add(new Label("Precio (transferencia):"), 0, row);
+        TextField fldPrecio = new TextField(precioActual.equals("null") ? "" : precioActual);
+        grid.add(fldPrecio, 1, row++);
+
+        // Talle
+        grid.add(new Label("Talle:"), 0, row);
+        ComboBox<String> cmbTalleModif = new ComboBox<>();
+        cmbTalleModif.getItems().addAll("", "XS", "S", "M", "L", "XL", "XXL", "Único");
+        cmbTalleModif.setValue(talleActual.equals("null") ? "" : talleActual);
+        cmbTalleModif.setPrefWidth(300);
+        grid.add(cmbTalleModif, 1, row++);
+
+        // Categoría
+        grid.add(new Label("Categoría:"), 0, row);
+        ComboBox<String> cmbCatModif = new ComboBox<>();
+        cmbCatModif.getItems().addAll("Remeras", "Pantalones", "Vestidos", "Buzos", "Conjuntos",
+                "Accesorios", "Carteras", "OnaFitness");
+        cmbCatModif.setValue(categoriaActual.replace("-Novedad",""));
+        cmbCatModif.setPrefWidth(300);
+        grid.add(cmbCatModif, 1, row++);
+
+        // Novedad
+        grid.add(new Label("¿Novedad?:"), 0, row);
+        CheckBox chkNovedadModif = new CheckBox();
+        chkNovedadModif.setSelected(categoriaActual.endsWith("-Novedad"));
+        grid.add(chkNovedadModif, 1, row++);
+
+        // Detalle
+        grid.add(new Label("Detalle:"), 0, row);
+        TextArea fldDetalle = new TextArea(detalleActual.equals("null") ? "" : detalleActual);
+        fldDetalle.setPrefRowCount(3);
+        fldDetalle.setPrefWidth(300);
+        grid.add(fldDetalle, 1, row++);
+
+        // Imagen actual
+        grid.add(new Label("Imagen actual:"), 0, row);
+        Label lblImgActual = new Label(urlImagenActual.isEmpty() ? "(sin imagen)" :
+                urlImagenActual.substring(urlImagenActual.lastIndexOf("/") + 1));
+        lblImgActual.setStyle("-fx-font-style: italic; -fx-text-fill: gray;");
+        grid.add(lblImgActual, 1, row++);
+
+        // Nueva imagen
+        grid.add(new Label("Nueva imagen\n(opcional):"), 0, row);
+        final File[] nuevaImagenRef = {null};
+        Label lblNuevaImg = new Label("(no seleccionada - se conserva la actual)");
+        lblNuevaImg.setStyle("-fx-font-style: italic; -fx-text-fill: gray;");
+        Button btnSelImg = new Button("Seleccionar imagen...");
+        btnSelImg.setOnAction(e -> {
+            FileChooser fc = new FileChooser();
+            fc.setTitle("Seleccionar nueva imagen");
+            fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Imágenes", "*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp"));
+            File f = fc.showOpenDialog(ventana);
+            if (f != null) {
+                nuevaImagenRef[0] = f;
+                lblNuevaImg.setText(f.getName());
+                lblNuevaImg.setStyle("-fx-font-style: normal; -fx-text-fill: green;");
+            }
+        });
+        VBox imgBox = new VBox(4, btnSelImg, lblNuevaImg);
+        grid.add(imgBox, 1, row++);
+
+        // Botones
+        HBox botones = new HBox(10);
+        botones.setAlignment(Pos.CENTER_RIGHT);
+        Button btnGuardar = new Button("💾 Guardar cambios");
+        btnGuardar.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;");
+        Button btnCancelar = new Button("Cancelar");
+        botones.getChildren().addAll(btnCancelar, btnGuardar);
+        grid.add(botones, 0, row, 2, 1);
+        final int rowFinal = row;
+
+        btnCancelar.setOnAction(e -> ventana.close());
+
+        btnGuardar.setOnAction(e -> {
+            String precioStr = fldPrecio.getText().trim();
+            if (precioStr.isEmpty()) {
+                mostrarAlerta("Error", "El precio no puede estar vacío.", Alert.AlertType.ERROR);
+                return;
+            }
+            final int nuevoPrecio;
+            try {
+                nuevoPrecio = Integer.parseInt(precioStr);
+            } catch (NumberFormatException ex) {
+                mostrarAlerta("Error", "El precio debe ser un número válido.", Alert.AlertType.ERROR);
+                return;
+            }
+            String catTemp = cmbCatModif.getValue() == null ? categoriaActual : cmbCatModif.getValue();
+            if (chkNovedadModif.isSelected() && !catTemp.endsWith("-Novedad")) {
+                catTemp += "-Novedad";
+            }
+            final String categoriaFinal = catTemp;
+            final Label lblCargando = new Label("⏳ Guardando cambios...");
+            lblCargando.setStyle("-fx-font-weight: bold;");
+            grid.add(lblCargando, 0, rowFinal + 1, 2, 1);
+            btnGuardar.setDisable(true);
+
+            javafx.concurrent.Task<Void> task = new javafx.concurrent.Task<>() {
+                @Override
+                protected Void call() throws Exception {
+                    modificarArticuloEnWeb(
+                            producto,
+                            carpetaActual,
+                            fldTitulo.getText().trim().isEmpty() ? "null" : fldTitulo.getText().trim(),
+                            fldTexto.getText().trim().isEmpty() ? "null" : fldTexto.getText().trim(),
+                            nuevoPrecio,
+                            cmbTalleModif.getValue() == null || cmbTalleModif.getValue().isEmpty() ? "null" : cmbTalleModif.getValue(),
+                            fldDetalle.getText().trim().isEmpty() ? "null" : fldDetalle.getText().trim(),
+                            categoriaFinal,
+                            nuevaImagenRef[0],
+                            urlImagenActual
+                    );
+                    return null;
+                }
+            };
+            task.setOnSucceeded(ev -> Platform.runLater(() -> {
+                mostrarAlerta("Éxito", "Artículo modificado correctamente en la web.", Alert.AlertType.INFORMATION);
+                ventana.close();
+                obtenerProductosDesdeBD();
+                tblProductosWeb.refresh();
+            }));
+            task.setOnFailed(ev -> Platform.runLater(() -> {
+                btnGuardar.setDisable(false);
+                grid.getChildren().remove(lblCargando);
+                mostrarAlerta("Error", "Error al modificar el artículo: " + task.getException().getMessage(), Alert.AlertType.ERROR);
+                task.getException().printStackTrace();
+            }));
+            new Thread(task).start();
+        });
+
+        Scene scene = new Scene(grid);
+        ventana.setScene(scene);
+        ventana.initModality(Modality.APPLICATION_MODAL);
+        ventana.showAndWait();
+    }
+
+    /**
+     * Lee los datos actuales del archivo .txt del artículo en Cloud Storage.
+     * Retorna array: [titulo, texto, precio, talle, detalle, categoria, carpeta, urlImagen]
+     */
+    private String[] leerDatosTxtDesdeCloud(RegistroArticuloVentas producto) {
+        try {
+            Storage storage = StorageOptions.getDefaultInstance().getService();
+            String idStr = String.valueOf(producto.getIdArticulo());
+
+            // Buscar en productos.json la carpeta y URL del artículo
+            Blob jsonBlob = storage.get("imagenes-web-capri", "productos.json");
+            if (jsonBlob == null) return null;
+            String jsonContent = new String(jsonBlob.getContent(), java.nio.charset.StandardCharsets.UTF_8);
+            JSONArray jsonArray = new JSONArray(jsonContent);
+
+            String carpeta = null, urlTxt = null, urlImagen = null, categoria = null;
+            for (int i = 0; i < jsonArray.length(); i++) {
+                JSONObject node = jsonArray.getJSONObject(i);
+                String nodoCarpeta = node.optString("carpeta", "");
+                if (nodoCarpeta.startsWith(idStr + "-")) {
+                    carpeta = nodoCarpeta;
+                    urlTxt = node.optString("txt", "");
+                    urlImagen = node.optString("imagen", "");
+                    categoria = node.optString("categoria", "");
+                    break;
+                }
+            }
+            if (carpeta == null) return null;
+
+            // Leer el .txt desde Cloud Storage
+            String rutaTxt = "Novedades/" + carpeta + "/" + carpeta + ".txt";
+            Blob txtBlob = storage.get("imagenes-web-capri", rutaTxt);
+            if (txtBlob == null) return null;
+            String contenido = new String(txtBlob.getContent(), java.nio.charset.StandardCharsets.UTF_8);
+
+            // Formato: {titulo}\n{texto}\n{precio}\n{talle}\n{detalle}
+            String[] lineas = contenido.split("\n");
+            String titulo  = lineas.length > 0 ? lineas[0].replaceAll("^\\{|\\}$", "") : "null";
+            String texto   = lineas.length > 1 ? lineas[1].replaceAll("^\\{|\\}$", "") : "null";
+            String precio  = lineas.length > 2 ? lineas[2].replaceAll("^\\{|\\}$", "") : "0";
+            String talle   = lineas.length > 3 ? lineas[3].replaceAll("^\\{|\\}$", "") : "null";
+            String detalle = lineas.length > 4 ? lineas[4].replaceAll("^\\{|\\}$", "") : "null";
+
+            return new String[]{titulo, texto, precio, talle, detalle, categoria, carpeta, urlImagen};
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    /**
+     * Modifica el artículo ya publicado en la web: actualiza el .txt, opcionalmente la imagen,
+     * actualiza productos.json y también el precio en BBDD.
+     */
+    private void modificarArticuloEnWeb(
+            RegistroArticuloVentas producto,
+            String carpeta,
+            String titulo, String texto, int precio,
+            String talle, String detalle,
+            String categoria,
+            File nuevaImagen,
+            String urlImagenActual) throws Exception {
+
+        Storage storage = StorageOptions.getDefaultInstance().getService();
+        String rutaCarpeta = "Novedades/" + carpeta + "/";
+
+        // 1. Actualizar el .txt en Cloud Storage
+        String contenido = String.format("{%s}\n{%s}\n{%d}\n{%s}\n{%s}",
+                titulo, texto, precio, talle, detalle);
+        String rutaTxt = rutaCarpeta + carpeta + ".txt";
+        storage.create(
+                BlobInfo.newBuilder("imagenes-web-capri", rutaTxt)
+                        .setContentType("text/plain; charset=utf-8").build(),
+                contenido.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        // 2. Si se seleccionó nueva imagen, subir y eliminar la antigua
+        String urlImagenFinal = urlImagenActual;
+        if (nuevaImagen != null) {
+            // Eliminar imagen anterior si existe
+            if (!urlImagenActual.isEmpty()) {
+                String rutaImgAntigua = urlImagenActual.replace("https://storage.googleapis.com/imagenes-web-capri/", "");
+                try { storage.delete(BlobId.of("imagenes-web-capri", rutaImgAntigua)); } catch (Exception ignored) {}
+            }
+            // Subir nueva imagen
+            String ext = nuevaImagen.getName().substring(nuevaImagen.getName().lastIndexOf("."));
+            String rutaImgNueva = rutaCarpeta + carpeta + ext;
+            urlImagenFinal = subirArchivoAGoogleCloudStorage(rutaImgNueva, nuevaImagen);
+        }
+
+        // 3. Actualizar productos.json con la nueva categoría e imagen
+        Blob jsonBlob = storage.get("imagenes-web-capri", "productos.json");
+        if (jsonBlob != null) {
+            String jsonContent = new String(jsonBlob.getContent(), java.nio.charset.StandardCharsets.UTF_8);
+            JSONArray jsonArray = new JSONArray(jsonContent);
+            String idStr = String.valueOf(producto.getIdArticulo());
+            for (int i = 0; i < jsonArray.length(); i++) {
+                JSONObject node = jsonArray.getJSONObject(i);
+                if (node.optString("carpeta", "").startsWith(idStr + "-")) {
+                    node.put("categoria", categoria);
+                    node.put("imagen", urlImagenFinal);
+                    node.put("txt", "https://storage.googleapis.com/imagenes-web-capri/" + rutaTxt);
+                    break;
+                }
+            }
+            storage.create(
+                    BlobInfo.newBuilder("imagenes-web-capri", "productos.json")
+                            .setContentType("application/json; charset=utf-8").build(),
+                    jsonArray.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+
+        // 4. Actualizar precio en BBDD
+        actualizarPrecioVentaTransferencia(producto.getIdArticulo(), precio);
+    }
+
+    /**
+     * Abre una ventana modal que permite seleccionar artículos publicados en la web
+     * y ajustar su precio de transferencia (web + BBDD) de forma porcentual.
+     */
+    private void mostrarVentanaAjustePorcentualPrecios() {
+        // Obtener solo artículos publicados
+        List<RegistroArticuloVentas> publicados = listaProductosWeb.stream()
+                .filter(p -> "true".equalsIgnoreCase(p.getPublicadoEnWeb()))
+                .collect(java.util.stream.Collectors.toList());
+
+        if (publicados.isEmpty()) {
+            mostrarAlerta("Sin artículos", "No hay artículos publicados en la web para ajustar.", Alert.AlertType.INFORMATION);
+            return;
+        }
+
+        Stage ventana = new Stage();
+        ventana.setTitle("Ajuste porcentual de precios - Artículos Web");
+
+        VBox root = new VBox(12);
+        root.setPadding(new Insets(18));
+
+        // ── Porcentaje ──────────────────────────────────────────
+        HBox filaPorcentaje = new HBox(10);
+        filaPorcentaje.setAlignment(Pos.CENTER_LEFT);
+        Label lblPct = new Label("Porcentaje de ajuste:");
+        TextField fldPorcentaje = new TextField();
+        fldPorcentaje.setPromptText("Ej: 10 (sube 10%)  o  -5 (baja 5%)");
+        fldPorcentaje.setPrefWidth(220);
+        filaPorcentaje.getChildren().addAll(lblPct, fldPorcentaje);
+        root.getChildren().add(filaPorcentaje);
+
+        // ── Tabla de selección ───────────────────────────────────
+        Label lblSeleccion = new Label("Seleccione los artículos a ajustar:");
+        lblSeleccion.setStyle("-fx-font-weight: bold;");
+        root.getChildren().add(lblSeleccion);
+
+        // Columna checkbox
+        TableView<RegistroArticuloVentas> tablaAjuste = new TableView<>();
+        tablaAjuste.setPrefHeight(320);
+        tablaAjuste.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+
+        // Mapa de selección
+        Map<Integer, javafx.beans.property.BooleanProperty> seleccionMap = new LinkedHashMap<>();
+        for (RegistroArticuloVentas art : publicados) {
+            seleccionMap.put(art.getIdArticulo(), new javafx.beans.property.SimpleBooleanProperty(false));
+        }
+
+        TableColumn<RegistroArticuloVentas, Boolean> colCheck = new TableColumn<>("");
+        colCheck.setMaxWidth(36);
+        colCheck.setMinWidth(36);
+        colCheck.setCellValueFactory(data ->
+                seleccionMap.get(data.getValue().getIdArticulo()));
+        colCheck.setCellFactory(col -> new TableCell<>() {
+            private final CheckBox cb = new CheckBox();
+            @Override protected void updateItem(Boolean item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || getTableRow().getItem() == null) { setGraphic(null); return; }
+                RegistroArticuloVentas art = getTableRow().getItem();
+                javafx.beans.property.BooleanProperty prop = seleccionMap.get(art.getIdArticulo());
+                cb.selectedProperty().unbindBidirectional(prop);
+                cb.selectedProperty().bindBidirectional(prop);
+                setGraphic(cb);
+            }
+        });
+
+        TableColumn<RegistroArticuloVentas, Integer> colIdAj = new TableColumn<>("ID");
+        colIdAj.setCellValueFactory(new PropertyValueFactory<>("idArticulo"));
+        colIdAj.setMaxWidth(55);
+
+        TableColumn<RegistroArticuloVentas, String> colNomAj = new TableColumn<>("Artículo");
+        colNomAj.setCellValueFactory(new PropertyValueFactory<>("nombreArticulo"));
+
+        TableColumn<RegistroArticuloVentas, Double> colPrecioAj = new TableColumn<>("Precio actual ($)");
+        colPrecioAj.setCellValueFactory(new PropertyValueFactory<>("precioTransferencia"));
+        colPrecioAj.setCellFactory(col -> new TableCell<>() {
+            @Override protected void updateItem(Double item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? null : String.format("$%,.0f", item));
+            }
+        });
+
+        tablaAjuste.getColumns().addAll(colCheck, colIdAj, colNomAj, colPrecioAj);
+        tablaAjuste.getItems().setAll(publicados);
+        root.getChildren().add(tablaAjuste);
+
+        // ── Botones Seleccionar todos / Ninguno ──────────────────
+        HBox filaBotSel = new HBox(8);
+        Button btnTodos = new Button("✔ Seleccionar todos");
+        Button btnNinguno = new Button("✖ Ninguno");
+        btnTodos.setOnAction(e -> seleccionMap.values().forEach(p -> p.set(true)));
+        btnNinguno.setOnAction(e -> seleccionMap.values().forEach(p -> p.set(false)));
+        filaBotSel.getChildren().addAll(btnTodos, btnNinguno);
+        root.getChildren().add(filaBotSel);
+
+        // ── Botones Aplicar / Cancelar ───────────────────────────
+        HBox filaBotAcc = new HBox(10);
+        filaBotAcc.setAlignment(Pos.CENTER_RIGHT);
+        Button btnAplicar = new Button("💰 Aplicar ajuste");
+        btnAplicar.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;");
+        Button btnCancelarAj = new Button("Cancelar");
+        filaBotAcc.getChildren().addAll(btnCancelarAj, btnAplicar);
+        root.getChildren().add(filaBotAcc);
+
+        btnCancelarAj.setOnAction(e -> ventana.close());
+
+        btnAplicar.setOnAction(e -> {
+            // Validar porcentaje
+            String pctStr = fldPorcentaje.getText().trim().replace(",", ".");
+            if (pctStr.isEmpty()) {
+                mostrarAlerta("Error", "Ingrese un porcentaje de ajuste.", Alert.AlertType.ERROR);
+                return;
+            }
+            double pct;
+            try {
+                pct = Double.parseDouble(pctStr);
+            } catch (NumberFormatException ex) {
+                mostrarAlerta("Error", "El porcentaje debe ser un número (ej: 10 o -5).", Alert.AlertType.ERROR);
+                return;
+            }
+            if (pct == 0) {
+                mostrarAlerta("Error", "El porcentaje no puede ser 0.", Alert.AlertType.ERROR);
+                return;
+            }
+
+            List<RegistroArticuloVentas> seleccionados = publicados.stream()
+                    .filter(art -> seleccionMap.get(art.getIdArticulo()).get())
+                    .collect(java.util.stream.Collectors.toList());
+
+            if (seleccionados.isEmpty()) {
+                mostrarAlerta("Error", "Seleccione al menos un artículo.", Alert.AlertType.ERROR);
+                return;
+            }
+
+            // Confirmación
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+            confirm.setTitle("Confirmar ajuste");
+            confirm.setHeaderText("Se ajustará el precio en " + (pct > 0 ? "+" : "") + pct + "% para " + seleccionados.size() + " artículo(s).");
+            confirm.setContentText("Esto actualizará el precio en la web (Cloud Storage) y en la base de datos.\n¿Continuar?");
+            Optional<ButtonType> res = confirm.showAndWait();
+            if (res.isEmpty() || res.get() != ButtonType.OK) return;
+
+            btnAplicar.setDisable(true);
+            btnAplicar.setText("⏳ Aplicando...");
+            final double pctFinal = pct;
+
+            javafx.concurrent.Task<Void> taskAjuste = new javafx.concurrent.Task<>() {
+                @Override
+                protected Void call() throws Exception {
+                    aplicarAjustePorcentualEnWeb(seleccionados, pctFinal);
+                    return null;
+                }
+            };
+            taskAjuste.setOnSucceeded(ev -> Platform.runLater(() -> {
+                ventana.close();
+                mostrarAlerta("Éxito", "Precios ajustados correctamente en la web y BBDD.", Alert.AlertType.INFORMATION);
+                obtenerProductosDesdeBD();
+                tblProductosWeb.refresh();
+            }));
+            taskAjuste.setOnFailed(ev -> Platform.runLater(() -> {
+                btnAplicar.setDisable(false);
+                btnAplicar.setText("💰 Aplicar ajuste");
+                mostrarAlerta("Error", "Error al ajustar precios: " + taskAjuste.getException().getMessage(), Alert.AlertType.ERROR);
+                taskAjuste.getException().printStackTrace();
+            }));
+            new Thread(taskAjuste).start();
+        });
+
+        ScrollPane scroll = new ScrollPane(root);
+        scroll.setFitToWidth(true);
+        Scene scene = new Scene(scroll, 560, 560);
+        ventana.setScene(scene);
+        ventana.initModality(Modality.APPLICATION_MODAL);
+        ventana.showAndWait();
+    }
+
+    /**
+     * Aplica el ajuste porcentual a cada artículo seleccionado:
+     * - Actualiza el archivo .txt en Cloud Storage con el nuevo precio
+     * - Actualiza el precio_venta_transferencia en BBDD
+     */
+    private void aplicarAjustePorcentualEnWeb(List<RegistroArticuloVentas> articulos, double porcentaje) throws Exception {
+        Storage storage = StorageOptions.getDefaultInstance().getService();
+
+        // Leer productos.json una sola vez
+        Blob jsonBlob = storage.get("imagenes-web-capri", "productos.json");
+        if (jsonBlob == null) throw new Exception("No se encontró productos.json en Cloud Storage.");
+        String jsonContent = new String(jsonBlob.getContent(), java.nio.charset.StandardCharsets.UTF_8);
+        JSONArray jsonArray = new JSONArray(jsonContent);
+
+        for (RegistroArticuloVentas art : articulos) {
+            int precioActual = (int) art.getPrecioTransferencia();
+            int nuevoPrecio = (int) Math.round(precioActual * (1 + porcentaje / 100.0));
+            if (nuevoPrecio <= 0) nuevoPrecio = 1;
+
+            String idStr = String.valueOf(art.getIdArticulo());
+
+            // Buscar la carpeta en productos.json
+            String carpeta = null;
+            for (int i = 0; i < jsonArray.length(); i++) {
+                JSONObject node = jsonArray.getJSONObject(i);
+                String nodoCarpeta = node.optString("carpeta", "");
+                if (nodoCarpeta.startsWith(idStr + "-")) {
+                    carpeta = nodoCarpeta;
+                    break;
+                }
+            }
+            if (carpeta == null) continue; // no encontrado, saltar
+
+            // Leer el .txt actual para conservar los demás campos
+            String rutaTxt = "Novedades/" + carpeta + "/" + carpeta + ".txt";
+            Blob txtBlob = storage.get("imagenes-web-capri", rutaTxt);
+            if (txtBlob == null) continue;
+
+            String contenido = new String(txtBlob.getContent(), java.nio.charset.StandardCharsets.UTF_8);
+            String[] lineas = contenido.split("\n");
+            String titulo  = lineas.length > 0 ? lineas[0].replaceAll("^\\{|}", "") : "null";
+            String texto   = lineas.length > 1 ? lineas[1].replaceAll("^\\{|}", "") : "null";
+            String talle   = lineas.length > 3 ? lineas[3].replaceAll("^\\{|}", "") : "null";
+            String detalle = lineas.length > 4 ? lineas[4].replaceAll("^\\{|}", "") : "null";
+
+            // Escribir nuevo .txt con precio actualizado
+            String nuevoContenido = String.format("{%s}\n{%s}\n{%d}\n{%s}\n{%s}",
+                    titulo, texto, nuevoPrecio, talle, detalle);
+            storage.create(
+                    BlobInfo.newBuilder("imagenes-web-capri", rutaTxt)
+                            .setContentType("text/plain; charset=utf-8").build(),
+                    nuevoContenido.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+            // Actualizar precio en BBDD
+            actualizarPrecioVentaTransferencia(art.getIdArticulo(), nuevoPrecio);
         }
     }
 
